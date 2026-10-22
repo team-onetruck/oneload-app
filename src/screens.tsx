@@ -68,18 +68,19 @@ export function Welcome() {
   const { lang, setLang, setScreen } = useApp()
   return (
     <main className="screen welcome">
-      <div className="welcome-line" aria-hidden>
-        <span className="wl-bar" />
-        {['B1', 'B2', 'B3'].map((f, i) => (
-          <span key={f} className={`wl-stop ${i === 2 ? 'end' : ''}`} style={{ left: `${16 + i * 34}%` }}>
-            <i />
-            <b>{f}</b>
-          </span>
-        ))}
-      </div>
       <div className="welcome-body">
-        <h1 className="wordmark">
-          한길 <span>Hangil</span>
+        {/* The wordmark is a two-station line: 한 ─●─ 길. */}
+        <h1 className="wordmark" aria-label="한길 Hangil">
+          <span className="wm-row" aria-hidden>
+            <span>한</span>
+            <span className="wm-link">
+              <i />
+            </span>
+            <span>길</span>
+          </span>
+          <span className="wm-latin" aria-hidden>
+            Hangil
+          </span>
         </h1>
         <p className="welcome-tag">{UI.tagline[lang]}</p>
         <p className="welcome-station">{UI.station[lang]}</p>
@@ -318,6 +319,7 @@ function DemoSign({ scenario, large = false }: { scenario: PhotoScenario; large?
 const DEMO_PHOTOS: { id: PhotoScenario; label: Text }[] = [
   { id: 'arexSign', label: { en: 'Transfer sign', ko: '환승 안내판' } },
   { id: 'ktxSign', label: { en: 'KTX hall sign', ko: 'KTX 맞이방' } },
+  { id: 'blurry', label: { en: 'Blurry photo', ko: '흐린 사진' } },
 ]
 
 export function Locate() {
@@ -680,7 +682,7 @@ export function DemoPanel() {
   const { lang, session } = app
   return (
     <>
-      <button className="demo-pill" onClick={() => app.setDemoOpen(true)}>
+      <button className={`demo-pill ${new URLSearchParams(location.search).has('demo') ? '' : 'opt-in'}`} onClick={() => app.setDemoOpen(true)}>
         {UI.demo[lang]}
       </button>
       {app.demoOpen && (

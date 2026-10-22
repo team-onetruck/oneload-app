@@ -19,7 +19,7 @@ Desktop shows a 390×844 phone frame; on a phone it fills the screen.
 
 ## Demo controls
 
-The **Demo** pill (top of the frame; a slim tab on the right edge on phones) shows the session state machine and lets you:
+The **Demo** pill (top of the desktop frame; on phones open the URL with `?demo` to get a slim tab on the right edge) shows the session state machine and lets you:
 
 - make the next AI request time out (error + retry path),
 - choose what an uploaded photo resolves to (match / KTX hall / no match),
