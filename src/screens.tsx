@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Banknote, BookOpen, Camera, Check, ChevronRight, Footprints,
@@ -10,9 +10,13 @@ import { NODES, POIS, TRAIN_NAME } from './data'
 import type { Floor, Lang, NodeId, PhotoScenario, Text } from './data'
 import { UI } from './i18n'
 import { totalMeters } from './route'
-import { StreetView } from './streetview'
 import { useApp } from './store'
 import type { Msg, SessionState } from './store'
+
+// three.js and the panorama viewer are most of the bundle; keep them out of
+// the first load and fetch them once a route is on screen.
+const loadStreetView = () => import('./streetview')
+const StreetView = lazy(() => loadStreetView().then((m) => ({ default: m.StreetView })))
 
 const WALK_M_PER_MIN = 70
 
@@ -541,6 +545,10 @@ export function RouteScreen() {
     stationRefs.current[stepIdx + 1]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }, [stepIdx])
 
+  useEffect(() => {
+    void loadStreetView()
+  }, [])
+
   if (!dest || !startNode) return null
   const remaining = steps.slice(stepIdx)
   const meters = totalMeters(remaining)
@@ -578,7 +586,9 @@ export function RouteScreen() {
         <p className="pad muted">{UI.noRoute[lang]}</p>
       ) : view === 'street' ? (
         <div className="sv-wrap">
-          <StreetView node={stations[stepIdx]} leg={steps[stepIdx]?.edge} lang={lang} />
+          <Suspense fallback={<div className="sv" />}>
+            <StreetView node={stations[stepIdx]} leg={steps[stepIdx]?.edge} lang={lang} />
+          </Suspense>
           {steps[stepIdx] && (
             <div className="sv-step">
               <ol className="sv-progress" aria-label={`${stepIdx + 1} / ${steps.length}`}>

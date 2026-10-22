@@ -77,12 +77,12 @@ export interface Pano {
 const EXAMPLE = (place: string): Text => ({ en: `Example photo · ${place}, not Seoul Station`, ko: `예시 사진 · ${place}, 서울역 아님` })
 
 export const PANOS: Partial<Record<NodeId, Pano>> = {
-  ktxHall: { src: '/panos/hamburg_hbf.jpg', northYaw: -100, example: EXAMPLE('Hamburg Hbf') },
-  l1gate: { src: '/panos/subway_entrance.jpg', northYaw: -80, example: EXAMPLE('subway passage') },
-  l4gate: { src: '/panos/subway_entrance.jpg', northYaw: -80, example: EXAMPLE('subway passage') },
-  concourse: { src: '/panos/metro_noord.jpg', northYaw: 162, example: EXAMPLE('Amsterdam Noord') },
-  expressGate: { src: '/panos/metro_vijzelgracht.jpg', northYaw: -156, example: EXAMPLE('Amsterdam Vijzelgracht') },
-  allstopGate: { src: '/panos/metro_vijzelgracht.jpg', northYaw: -156, example: EXAMPLE('Amsterdam Vijzelgracht') },
+  ktxHall: { src: '/panos/hamburg_hbf.webp', northYaw: -100, example: EXAMPLE('Hamburg Hbf') },
+  l1gate: { src: '/panos/subway_entrance.webp', northYaw: -80, example: EXAMPLE('subway passage') },
+  l4gate: { src: '/panos/subway_entrance.webp', northYaw: -80, example: EXAMPLE('subway passage') },
+  concourse: { src: '/panos/metro_noord.webp', northYaw: 162, example: EXAMPLE('Amsterdam Noord') },
+  expressGate: { src: '/panos/metro_vijzelgracht.webp', northYaw: -156, example: EXAMPLE('Amsterdam Vijzelgracht') },
+  allstopGate: { src: '/panos/metro_vijzelgracht.webp', northYaw: -156, example: EXAMPLE('Amsterdam Vijzelgracht') },
 }
 
 export type PoiId = 'expressDesk' | 'machines' | 'expressPlatform' | 'allstopPlatform'
