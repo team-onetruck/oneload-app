@@ -1284,6 +1284,185 @@ button {
   z-index: 3;
 }
 
+/* ---------- Street view ---------- */
+
+.view-toggle {
+  display: inline-flex;
+  margin-top: 14px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+.view-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #e6f3fa;
+}
+.view-toggle button[aria-selected='true'] {
+  background: #fff;
+  color: var(--line-deep);
+}
+.route.street-mode {
+  overflow: hidden;
+}
+.street-mode .route-head {
+  padding-bottom: 14px;
+}
+.street-mode .route-dest {
+  font-size: 24px;
+}
+.sv-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #15191e;
+}
+.sv {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.sv-canvas {
+  position: absolute;
+  inset: 0;
+}
+.sv-example {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  z-index: 2;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(16, 19, 23, 0.72);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
+}
+.sv-tools {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+  display: grid;
+  gap: 8px;
+}
+.sv-tool {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+.sv-missing {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  padding: 30px;
+  color: #c9d2da;
+  text-align: center;
+  font-size: 15px;
+  line-height: 1.5;
+}
+/* The floor arrow keeps the route's line colour so it reads as the same line. */
+.sv-arrow {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.45));
+  animation: sv-bob 1.6s var(--ease-out) infinite alternate;
+}
+.sv-arrow svg {
+  width: 96px;
+  height: 96px;
+  transform: perspective(240px) rotateX(52deg);
+  fill: var(--line);
+  stroke: #fff;
+  stroke-width: 3;
+  stroke-linejoin: round;
+}
+.sv-arrow span {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--line-deep);
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+@keyframes sv-bob {
+  to {
+    transform: translateY(-8px);
+  }
+}
+.sv-step {
+  background: #fff;
+  padding: 14px 20px 6px;
+  border-radius: 20px 20px 0 0;
+  margin-top: -16px;
+  position: relative;
+  z-index: 3;
+}
+.sv-progress {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.sv-progress li {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--line-soft);
+}
+.sv-progress li.done {
+  background: var(--line);
+}
+.sv-progress li.current {
+  background: var(--ink);
+}
+.sv-step-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.38;
+  text-wrap: pretty;
+}
+.sv-step-row .leg-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 8px;
+  background: var(--ink);
+  color: #fff;
+}
+.sv-next {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 4px 40px;
+  font-size: 14px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.street-mode .bottom-bar {
+  margin-top: 0;
+}
+
 /* ---------- Arrived ---------- */
 
 .arrived {

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Banknote, BookOpen, Camera, Check, ChevronRight, Footprints,
-  ImagePlus, List, MessageCircle, Navigation, RefreshCw, ScanLine, Star, Ticket, X,
+  ImagePlus, List, MessageCircle, Navigation, RefreshCw, Rotate3d, Route, ScanLine, Star, Ticket, X,
 } from 'lucide-react'
 import { render } from './assistant'
 import type { Action, Rendered } from './assistant'
@@ -10,6 +10,7 @@ import { NODES, POIS, TRAIN_NAME } from './data'
 import type { Floor, Lang, NodeId, PhotoScenario, Text } from './data'
 import { UI } from './i18n'
 import { totalMeters } from './route'
+import { StreetView } from './streetview'
 import { useApp } from './store'
 import type { Msg, SessionState } from './store'
 
@@ -518,6 +519,7 @@ export function RouteScreen() {
   const stationRefs = useRef<(HTMLSpanElement | null)[]>([])
   const lineRef = useRef<HTMLOListElement>(null)
   const [rail, setRail] = useState({ first: 0, last: 0, here: 0 })
+  const [view, setView] = useState<'line' | 'street'>('line')
   const stations: NodeId[] = startNode ? [startNode, ...steps.map((s) => s.edge.to)] : []
 
   // Track, fill and the "you are here" ring are positioned from the real dot
@@ -529,7 +531,7 @@ export function RouteScreen() {
     const top = line.getBoundingClientRect().top
     const centre = (d: HTMLSpanElement) => d.getBoundingClientRect().top - top + d.offsetHeight / 2
     setRail({ first: centre(dots[0]!), last: centre(dots[dots.length - 1]!), here: centre(dots[stepIdx]!) })
-  }, [stepIdx, steps, lang, stations.length])
+  }, [stepIdx, steps, lang, stations.length, view])
 
   useEffect(() => {
     stationRefs.current[stepIdx + 1]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -542,7 +544,7 @@ export function RouteScreen() {
   const lastLeg = stepIdx >= steps.length - 1
 
   return (
-    <main className="screen route">
+    <main className={`screen route ${view === 'street' ? 'street-mode' : ''}`}>
       <header className="route-head">
         <div className="route-head-top">
           <button className="icon-btn on-dark" onClick={() => app.setScreen('chat')} aria-label={UI.ask[lang]}>
@@ -558,10 +560,41 @@ export function RouteScreen() {
             {meters} m · {lang === 'en' ? `≈${mins} min walk` : `약 ${mins}분`}
           </span>
         </div>
+        <div className="view-toggle" role="tablist">
+          {(['line', 'street'] as const).map((v) => (
+            <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}>
+              {v === 'line' ? <Route size={16} /> : <Rotate3d size={16} />}
+              {v === 'line' ? UI.viewLine[lang] : UI.viewStreet[lang]}
+            </button>
+          ))}
+        </div>
       </header>
 
       {steps.length === 0 ? (
         <p className="pad muted">{UI.noRoute[lang]}</p>
+      ) : view === 'street' ? (
+        <div className="sv-wrap">
+          <StreetView node={stations[stepIdx]} leg={steps[stepIdx]?.edge} lang={lang} />
+          {steps[stepIdx] && (
+            <div className="sv-step">
+              <ol className="sv-progress" aria-label={`${stepIdx + 1} / ${steps.length}`}>
+                {steps.map((_, i) => (
+                  <li key={i} className={i < stepIdx ? 'done' : i === stepIdx ? 'current' : ''} />
+                ))}
+              </ol>
+              <div className="sv-step-row">
+                <span className="leg-icon">{KIND_ICON[steps[stepIdx].edge.kind]}</span>
+                <p>
+                  {steps[stepIdx].edge.text[lang]}
+                  <span className="num leg-m"> {steps[stepIdx].edge.meters} m</span>
+                </p>
+              </div>
+              <p className="sv-next">
+                → {NODES[steps[stepIdx].edge.to].name[lang]} <FloorBadge floor={NODES[steps[stepIdx].edge.to].floor} />
+              </p>
+            </div>
+          )}
+        </div>
       ) : (
         <ol className="line" ref={lineRef}>
           <span className="line-track" style={{ top: rail.first, height: rail.last - rail.first }} aria-hidden />

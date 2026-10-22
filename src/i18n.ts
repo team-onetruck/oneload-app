@@ -50,6 +50,11 @@ export const UI = {
   now: { en: 'Now', ko: '지금' },
   routeOnly: { en: 'Uses registered passages only', ko: '등록된 통로만 사용해요' },
   noRoute: { en: 'No registered route from here. Choose another start point.', ko: '여기서 가는 등록된 경로가 없어요. 다른 출발 위치를 골라주세요.' },
+  viewLine: { en: 'Line', ko: '노선' },
+  viewStreet: { en: 'Street view', ko: '거리뷰' },
+  svFace: { en: 'Face the arrow', ko: '화살표 방향 보기' },
+  svGyro: { en: 'Look around by moving your phone', ko: '폰을 움직여 둘러보기' },
+  svMissing: { en: 'No photo for this spot yet. Follow the step below or switch to the line view.', ko: '이 지점은 아직 사진이 없어요. 아래 안내를 따르거나 노선 보기로 바꿔주세요.' },
 
   arrivedTitle: { en: 'You’ve arrived', ko: '도착했어요' },
   rate: { en: 'How was the guidance?', ko: '안내는 어땠나요?' },

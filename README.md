@@ -7,6 +7,14 @@ Clickable, phone-sized prototype of the Hangil demo client for the Seoul Station
 - Floors of AREX ticket points (B2 express, B3 all-stop) and platforms (B7) follow the [AREX official guide](https://www.airportrailroad.com/co/steUsfGud.do), checked 2026-10-22.
 - Passages, distances, sign wording and "demo doc" sources are placeholders until the field survey.
 
+## Street view
+
+The route screen has a **Line / Street view** toggle. Street view shows a 360° photo of the current point with a floor arrow toward the next one; **Next** steps to the next photo.
+
+- Each node stores one panorama and `northYaw` (where map north sits in the photo). The arrow angle is `northYaw + leg heading`, so no per-route arrow data is stored.
+- The photos in `public/panos/` are **CC0 samples of other stations** from [Poly Haven](https://polyhaven.com) (Hamburg Hbf, a subway passage, Amsterdam Noord and Vijzelgracht), labelled "Example photo" on screen. Replace them with the Seoul Station field shoot; faces must be blurred before publishing.
+- Points without a photo show a "no photo yet" panel; ticket counters and machines have none yet.
+
 ## Run
 
 ```sh

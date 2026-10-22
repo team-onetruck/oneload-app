@@ -8,6 +8,15 @@ importers:
 
   .:
     dependencies:
+      '@photo-sphere-viewer/core':
+        specifier: ^5.15.1
+        version: 5.15.1
+      '@photo-sphere-viewer/gyroscope-plugin':
+        specifier: ^5.15.1
+        version: 5.15.1(@photo-sphere-viewer/core@5.15.1)
+      '@photo-sphere-viewer/markers-plugin':
+        specifier: ^5.15.1
+        version: 5.15.1(@photo-sphere-viewer/core@5.15.1)
       lucide-react:
         specifier: ^1.60.0
         version: 1.60.0(@types/react@19.3.0)(react@19.3.1)
@@ -169,6 +178,19 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [win32]
+
+  '@photo-sphere-viewer/core@5.15.1':
+    resolution: {integrity: sha512-nhJviczUB1xiAT/I7mGba9iDIw7DvsiK34hbR9t7kIrg9MySG33uA+a4QUk2dEOP5PjcKMj58wod8I/dQ7ePiw==}
+
+  '@photo-sphere-viewer/gyroscope-plugin@5.15.1':
+    resolution: {integrity: sha512-iE+pXa+18cFO8pT4puI+fAH06FF7woEh50+56PiOKJ0pKLvnAOHD27fPpiIBlZ1CNq9otCOd/T2GhATE2QdMkA==}
+    peerDependencies:
+      '@photo-sphere-viewer/core': 5.15.1
+
+  '@photo-sphere-viewer/markers-plugin@5.15.1':
+    resolution: {integrity: sha512-57WiHy8fcQfwid9x07ADiQJGxzcFxclbR2yIqeggzfPDguwJlCKwX5tj8brTRqwouUiHpkb80QWxHByxt45LcA==}
+    peerDependencies:
+      '@photo-sphere-viewer/core': 5.15.1
 
   '@rolldown/binding-android-arm-eabi@1.2.14':
     resolution: {integrity: sha512-aWR+XKH9+rW7m5fWq/5360J3mHycrx/o6xZM2DQFdJnTMdyP7/WzxPjhtLbVWdKo2y612/4U1bWqb3HQhiF7vg==}
@@ -453,6 +475,9 @@ packages:
     resolution: {integrity: sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==}
     engines: {node: '>=0.10.0'}
 
+  three@0.185.1:
+    resolution: {integrity: sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg==}
+
   tinyglobby@0.2.17:
     resolution: {integrity: sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g==}
     engines: {node: '>=12.0.0'}
@@ -568,6 +593,18 @@ snapshots:
 
   '@oxlint/binding-win32-x64-msvc@1.89.0':
     optional: true
+
+  '@photo-sphere-viewer/core@5.15.1':
+    dependencies:
+      three: 0.185.1
+
+  '@photo-sphere-viewer/gyroscope-plugin@5.15.1(@photo-sphere-viewer/core@5.15.1)':
+    dependencies:
+      '@photo-sphere-viewer/core': 5.15.1
+
+  '@photo-sphere-viewer/markers-plugin@5.15.1(@photo-sphere-viewer/core@5.15.1)':
+    dependencies:
+      '@photo-sphere-viewer/core': 5.15.1
 
   '@rolldown/binding-android-arm-eabi@1.2.14':
     optional: true
@@ -766,6 +803,8 @@ snapshots:
   scheduler@0.28.0: {}
 
   source-map-js@1.2.2: {}
+
+  three@0.185.1: {}
 
   tinyglobby@0.2.17:
     dependencies:
