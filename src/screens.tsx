@@ -69,15 +69,19 @@ export function Welcome() {
   const { lang, setLang, setScreen } = useApp()
   return (
     <main className="screen welcome">
+      <div className="welcome-line" aria-hidden>
+        <span className="wl-bar" />
+        {['B1', 'B2', 'B3'].map((f, i) => (
+          <span key={f} className={`wl-stop ${i === 2 ? 'end' : ''}`} style={{ left: `${16 + i * 34}%` }}>
+            <i />
+            <b>{f}</b>
+          </span>
+        ))}
+      </div>
       <div className="welcome-body">
-        {/* The wordmark is a two-station line: 한 ─●─ 길. */}
         <h1 className="wordmark" aria-label="한길 Hangil">
-          <span className="wm-row" aria-hidden>
-            <span>한</span>
-            <span className="wm-link">
-              <i />
-            </span>
-            <span>길</span>
+          <span aria-hidden>
+            한<span className="wm-dot">·</span>길
           </span>
           <span className="wm-latin" aria-hidden>
             Hangil
