@@ -27,7 +27,7 @@ Desktop shows a 390×844 phone frame; on a phone it fills the screen.
 
 ## Deploy (macserver)
 
-`dist/` is synced to `macserver:~/hangil-demo/dist`. Caddy on `127.0.0.1:4173` serves it (zstd/gzip, immutable cache for `/assets`) and proxies `/api/*` to the backend; Tailscale Funnel exposes both at `https://baki-macbookpro.tail3286a4.ts.net:10000/`. Caddy runs as a launchd agent whose config lives in `oneload-backend/deploy/macserver/`, so it survives reboots.
+`dist/` is synced to `macserver:~/hangil-demo/dist`. Caddy on `127.0.0.1:4173` serves it (zstd/gzip, immutable cache for `/assets`), proxies `/api/*` to the backend and serves `/panos/*` from [oneload-data](https://github.com/team-onetruck/oneload-data); Tailscale Funnel exposes all of it at `https://baki-macbookpro.tail3286a4.ts.net:10000/`. The server setup lives in [oneload-infra](https://github.com/team-onetruck/oneload-infra).
 
 ```sh
 pnpm build && rsync -a --delete dist/ macserver:~/hangil-demo/dist/
