@@ -27,12 +27,10 @@ Desktop shows a 390×844 phone frame; on a phone it fills the screen.
 
 ## Deploy (macserver)
 
-`dist/` is synced to `macserver:~/hangil-demo/dist` and served by Caddy on `127.0.0.1:4173` (zstd/gzip, immutable cache for `/assets`). Tailscale Funnel exposes it at `https://baki-macbookpro.tail3286a4.ts.net:10000/`.
+`dist/` is synced to `macserver:~/hangil-demo/dist`. Caddy on `127.0.0.1:4173` serves it (zstd/gzip, immutable cache for `/assets`) and proxies `/api/*` to the backend; Tailscale Funnel exposes both at `https://baki-macbookpro.tail3286a4.ts.net:10000/`. Caddy runs as a launchd agent whose config lives in `oneload-backend/deploy/macserver/`, so it survives reboots.
 
 ```sh
 pnpm build && rsync -a --delete dist/ macserver:~/hangil-demo/dist/
-# restart after a reboot (Caddy is not a login service yet):
-ssh macserver 'cd ~/hangil-demo && /opt/homebrew/bin/caddy start --config Caddyfile --adapter caddyfile >/dev/null 2>&1 &'
 ```
 
 ## Demo controls
