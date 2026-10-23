@@ -21,6 +21,8 @@ import type {
   PoisOut,
   RouteOut,
 } from '../api/types'
+import { MESSAGE_TRIGGER, NEXT_ACTION, allows, nextState } from '../api/sessionMachine'
+import type { SessionStateName, Trigger } from '../api/sessionMachine'
 import { GRAPH, MAP_ID, MAP_SUMMARY, MAP_VERSION, POIS } from './fixtures/seoulStation'
 
 // 백엔드 동작의 근거는 backend/app 아래 파일이다. 파일 이름을 각 부분 주석에 적어 둔다.
@@ -68,15 +70,7 @@ interface Faults {
 
 // --- 서버 상태 -----------------------------------------------------------------------------
 
-type State =
-  | 'idle'
-  | 'needs_clarification'
-  | 'needs_location'
-  | 'needs_confirmation'
-  | 'ready_to_navigate'
-  | 'navigating'
-  | 'arrived'
-  | 'failed'
+type State = SessionStateName
 
 export interface SessionRow {
   id: string
@@ -339,62 +333,19 @@ function oneOf<T extends string>(value: unknown, allowed: readonly T[], loc: str
 
 const lang = (value: unknown, loc: string[]) => oneOf(value, ['en', 'ko'] as const, loc)
 
-// --- 세션 상태 기계 (backend/app/domain/session_state.py) ------------------------------------
+// --- 세션 상태 기계 (표는 src/api/sessionMachine.ts) -----------------------------------------
 
-type Trigger =
-  | 'answered'
-  | 'clarification_asked'
-  | 'destination_set'
-  | 'relocalize'
-  | 'candidates_found'
-  | 'no_match'
-  | 'location_confirmed'
-  | 'route_created'
-  | 'navigation_started'
-  | 'arrived'
-  | 'navigation_cancelled'
-
-const ACTIVE: State[] = ['idle', 'needs_clarification', 'needs_location', 'needs_confirmation', 'ready_to_navigate', 'navigating', 'arrived']
-const LOCATING: State[] = ['needs_location', 'needs_confirmation']
-
-// trigger -> [허용되는 상태, 다음 상태]. null은 그대로 둔다는 뜻이다.
-const TRANSITIONS: Record<Trigger, [State[], State | null]> = {
-  answered: [ACTIVE, null],
-  clarification_asked: [ACTIVE, 'needs_clarification'],
-  destination_set: [ACTIVE, null],
-  relocalize: [ACTIVE, 'needs_location'],
-  candidates_found: [LOCATING, 'needs_confirmation'],
-  no_match: [LOCATING, 'needs_location'],
-  location_confirmed: [LOCATING, 'ready_to_navigate'],
-  route_created: [['ready_to_navigate', 'navigating'], null],
-  navigation_started: [['ready_to_navigate'], 'navigating'],
-  arrived: [['navigating'], 'arrived'],
-  navigation_cancelled: [ACTIVE, 'idle'],
+// 허용되지 않는 전이는 409 INVALID_STATE (backend/app/api/deps.py의 advance)
+function nextStateOrFail(state: State, trigger: Trigger, hasLocation = false): State {
+  const next = nextState(state, trigger, hasLocation)
+  if (!next) throw new Fail('INVALID_STATE', `Not allowed while the session is ${state}.`, { state })
+  return next
 }
 
-function nextState(state: State, trigger: Trigger, hasLocation = false): State {
-  const [allowed, target] = TRANSITIONS[trigger]
-  if (!allowed.includes(state))
-    throw new Fail('INVALID_STATE', `Not allowed while the session is ${state}.`, { state })
-  if (trigger === 'destination_set') return hasLocation ? 'ready_to_navigate' : 'needs_location'
-  return target ?? state
-}
-
-// 상태를 바꾸고 revision을 올린다 (backend/app/api/deps.py의 advance).
+// 상태를 바꾸고 revision을 올린다
 function advance(row: SessionRow, trigger: Trigger, hasLocation = false) {
-  row.state = nextState(row.state, trigger, hasLocation)
+  row.state = nextStateOrFail(row.state, trigger, hasLocation)
   row.revision += 1
-}
-
-const NEXT_ACTION: Record<State, NavigationStateOut['next_action']> = {
-  idle: 'reply',
-  needs_clarification: 'reply',
-  needs_location: 'locate',
-  needs_confirmation: 'confirm_location',
-  ready_to_navigate: 'navigate',
-  navigating: 'continue_navigation',
-  arrived: 'none',
-  failed: 'none',
 }
 
 // --- 지도 ----------------------------------------------------------------------------------
@@ -721,15 +672,6 @@ function agentReply(row: SessionRow, message: string, hasImage: boolean, selecte
   )
 }
 
-const MESSAGE_TRIGGER: Record<AgentReply['status'], Trigger> = {
-  answered: 'answered',
-  cannot_answer: 'answered',
-  out_of_scope: 'answered',
-  needs_clarification: 'clarification_asked',
-  destination_set: 'destination_set',
-  relocalize: 'relocalize',
-}
-
 // --- 사진 (backend/app/api/deps.py의 read_jpeg, backend/app/domain/localization.py) ----------
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024
@@ -975,7 +917,7 @@ export const handlers = [
       if (language) row.language = language
       const agent = agentReply(row, message, hasImage, selectedPoiId)
       const confirmedNodeId = agent.status === 'relocalize' ? null : row.confirmedNodeId
-      const state = nextState(row.state, MESSAGE_TRIGGER[agent.status], confirmedNodeId !== null)
+      const state = nextStateOrFail(row.state, MESSAGE_TRIGGER[agent.status], confirmedNodeId !== null)
 
       row.slots = agent.slots
       row.confirmedNodeId = confirmedNodeId
@@ -1006,7 +948,7 @@ export const handlers = [
 
       // 위치를 스스로 확정하지 않는다. 사용자가 /location-confirmations로 고른다.
       checkMapVersion(mapVersion)
-      if (!TRANSITIONS.no_match[0].includes(row.state))
+      if (!allows(row.state, 'no_match'))
         throw new Fail('INVALID_STATE', `Not allowed while the session is ${row.state}.`, { state: row.state })
       await readJpeg(image)
       if (faults.vision === 'unavailable')
