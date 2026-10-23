@@ -1,6 +1,6 @@
 # Date: 2026-10-23
 # Author: Jung Minkyu
-# Purpose: push와 pull_request마다 pnpm verify를 실행하고, e2e는 별도 job으로 분리하는 CI
+# Purpose: push와 pull_request마다 pnpm verify를 실행하고, e2e는 별도 job으로 분리하는 CI. main이 통과하면 oneload-backend의 배포를 시작한다
 
 name: CI
 
@@ -139,3 +139,15 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+  # main이 verify와 e2e를 모두 통과하면 oneload-backend의 CI / Deploy를 시작한다. 그 배포가 이 레포의 main을
+  # 받아 macserver에서 웹 이미지(hangil-web)로 빌드해 올린다. 이 레포는 공개라 self-hosted runner를 쓰지 않는다.
+  deploy:
+    needs: [verify, e2e]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh workflow run ci.yml -R team-onetruck/oneload-backend --ref main
+        env:
+          # oneload-backend 하나에만 Actions 읽기·쓰기 권한이 있는 fine-grained 토큰
+          GH_TOKEN: ${{ secrets.HANGIL_DEPLOY_TOKEN }}

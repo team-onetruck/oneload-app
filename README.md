@@ -86,11 +86,9 @@ mock 기준선 5개(`e2e/mock/`)는 서버 없는 데모 흐름이 그대로인�
 
 ## Deploy (macserver)
 
-`dist/` is synced to `macserver:~/hangil-demo/dist`. Caddy on `127.0.0.1:4173` serves it (zstd/gzip, immutable cache for `/assets`), proxies `/api/*` to the backend and serves `/panos/*` from [oneload-data](https://github.com/team-onetruck/oneload-data); Tailscale Funnel exposes all of it at `https://baki-macbookpro.tail3286a4.ts.net:10000/`. The server setup lives in [oneload-infra](https://github.com/team-onetruck/oneload-infra).
+Merging to `main` deploys automatically: once CI passes, its `deploy` job starts oneload-backend's CI / Deploy, which builds this repo's `main` into the `hangil-web` image on macserver (see [docs/ci-cd.md](docs/ci-cd.md)). Caddy in that image serves the build (zstd/gzip, immutable cache for `/assets`), proxies `/api/*` to the backend and serves `/panos/*` from [oneload-data](https://github.com/team-onetruck/oneload-data); Tailscale Funnel exposes all of it at `https://baki-macbookpro.tail3286a4.ts.net:10000/`. The server setup lives in [oneload-infra](https://github.com/team-onetruck/oneload-infra).
 
-```sh
-pnpm build && rsync -a --delete dist/ macserver:~/hangil-demo/dist/
-```
+Redeploy the current `main` by hand: `gh workflow run ci.yml -R team-onetruck/oneload-backend`.
 
 ## Demo controls
 
