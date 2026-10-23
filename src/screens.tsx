@@ -22,6 +22,8 @@ import type { Attachment, Msg, SessionState } from './store'
 // the first load and fetch them once a route is on screen.
 const loadStreetView = () => import('./streetview')
 const StreetView = lazy(() => loadStreetView().then((m) => ({ default: m.StreetView })))
+const loadLiveView = () => import('./liveview')
+const LiveView = lazy(() => loadLiveView().then((m) => ({ default: m.LiveView })))
 
 const WALK_M_PER_MIN = 70
 
@@ -696,7 +698,7 @@ export function RouteScreen() {
   const stationRefs = useRef<(HTMLSpanElement | null)[]>([])
   const lineRef = useRef<HTMLOListElement>(null)
   const [rail, setRail] = useState({ first: 0, last: 0, here: 0 })
-  const [view, setView] = useState<'line' | 'street'>('line')
+  const [view, setView] = useState<'line' | 'street' | 'live'>('line')
   const stops = guide?.stops ?? []
   const legs = guide?.legs ?? []
 
@@ -717,6 +719,7 @@ export function RouteScreen() {
 
   useEffect(() => {
     void loadStreetView()
+    void loadLiveView()
   }, [])
 
   if (routing || routeError || !guide) return <RouteWaiting />
@@ -726,7 +729,7 @@ export function RouteScreen() {
   const leg = legs[stepIdx]
 
   return (
-    <main className={`screen route ${view === 'street' ? 'street-mode' : ''}`}>
+    <main className={`screen route ${view !== 'line' ? 'street-mode' : ''}`}>
       <header className="route-head">
         <div className="route-head-top">
           <button className="icon-btn on-dark" onClick={() => app.setScreen('chat')} aria-label={UI.ask[lang]}>
@@ -743,10 +746,10 @@ export function RouteScreen() {
           </span>
         </div>
         <div className="view-toggle" role="tablist">
-          {(['line', 'street'] as const).map((v) => (
+          {(['line', 'street', 'live'] as const).map((v) => (
             <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}>
-              {v === 'line' ? <Route size={16} /> : <Rotate3d size={16} />}
-              {v === 'line' ? UI.viewLine[lang] : UI.viewStreet[lang]}
+              {v === 'line' ? <Route size={16} /> : v === 'street' ? <Rotate3d size={16} /> : <Camera size={16} />}
+              {v === 'line' ? UI.viewLine[lang] : v === 'street' ? UI.viewStreet[lang] : UI.viewLive[lang]}
             </button>
           ))}
         </div>
@@ -754,11 +757,28 @@ export function RouteScreen() {
 
       {legs.length === 0 ? (
         <p className="pad muted">{UI.noRoute[lang]}</p>
-      ) : view === 'street' ? (
+      ) : view !== 'line' ? (
         <div className="sv-wrap">
-          {leg && (
+          {leg && view === 'street' && (
             <Suspense fallback={<div className="sv" />}>
               <StreetView leg={leg} lang={lang} />
+            </Suspense>
+          )}
+          {leg && view === 'live' && (
+            <Suspense fallback={<div className="sv" />}>
+              <LiveView
+                leg={leg}
+                lang={lang}
+                showDebug={demoMode}
+                onLeave={() => setView('line')}
+                chip={
+                  <>
+                    <span className="live-chip-name">{placeName(leg.from, lang)}</span>
+                    {leg.from.floor && <FloorBadge floor={leg.from.floor} />}
+                    <em>{stepIdx === 0 ? UI.liveConfirmed[lang] : UI.liveStepped[lang]}</em>
+                  </>
+                }
+              />
             </Suspense>
           )}
           {leg && (
