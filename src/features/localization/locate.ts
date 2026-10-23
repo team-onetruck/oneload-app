@@ -4,7 +4,7 @@
  * Purpose: 사진 위치 인식을 서버에 요청하고 응답을 화면이 쓰는 결과(후보 / 재촬영 / 직접 선택)로 바꾼다
  */
 import { isAiServiceUnavailable } from '../../api/errors'
-import type { ApiAdapter, LocalizationOut, SessionStatus } from '../../api/types'
+import type { ApiAdapter, LocalizationOut, MutationOptions, SessionStatus } from '../../api/types'
 import { compressImage } from './compressImage'
 
 export type LocationCandidate = LocalizationOut['candidates'][number]
@@ -34,24 +34,33 @@ export function toLocateResult(out: LocalizationOut): LocateResult {
   return { kind: 'no_match', retakeHint: out.retake_hint, session: out.session }
 }
 
-export async function locateFromPhoto(
+// 이미 압축한 JPEG로 위치 후보를 요청한다. 다시 시도할 때는 처음 요청의 키를 options로 넘긴다.
+export async function requestLocalization(
   api: Pick<ApiAdapter, 'postLocalization'>,
   req: LocateRequest,
-  photo: Blob,
-  compress: (photo: Blob) => Promise<Blob> = compressImage,
+  image: Blob,
+  options: MutationOptions = {},
 ): Promise<LocateResult> {
-  const image = await compress(photo)
   let out: LocalizationOut
   try {
-    out = await api.postLocalization(req.sessionId, {
-      image,
-      map_version: req.mapVersion,
-      last_node_id: req.lastNodeId ?? null,
-    })
+    out = await api.postLocalization(
+      req.sessionId,
+      { image, map_version: req.mapVersion, last_node_id: req.lastNodeId ?? null },
+      options,
+    )
   } catch (error) {
     // retryable이어도 다시 보내지 않는다. 위치를 추측하지 않고 사용자가 목록에서 고르게 한다.
     if (isAiServiceUnavailable(error)) return { kind: 'manual', reason: 'ai_unavailable' }
     throw error
   }
   return toLocateResult(out)
+}
+
+export async function locateFromPhoto(
+  api: Pick<ApiAdapter, 'postLocalization'>,
+  req: LocateRequest,
+  photo: Blob,
+  compress: (photo: Blob) => Promise<Blob> = compressImage,
+): Promise<LocateResult> {
+  return requestLocalization(api, req, await compress(photo))
 }
