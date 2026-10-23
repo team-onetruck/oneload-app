@@ -14,7 +14,7 @@ CD(지속적 배포)는 main에 합쳐진 결과를 사람 손 없이 서버에 
 
 | 워크플로 | 파일 | 언제 | 하는 일 | 상태 |
 | --- | --- | --- | --- | --- |
-| CI | `.github/workflows/ci.yml` | 모든 브랜치 push, 모든 PR | `pnpm verify`, e2e(Playwright 9개) | 동작 중 |
+| CI | `.github/workflows/ci.yml` | 모든 브랜치 push, 모든 PR | `pnpm verify`, e2e(Playwright 11개) | 동작 중 |
 | Deploy | `.github/workflows/deploy.yml` | 지금은 수동 실행만 (`workflow_dispatch`) | main을 검증·빌드해 macserver의 `~/hangil-demo/dist`로 동기화 | 초안. 관리자 설정 후 push 트리거 활성화 |
 
 ## 2. CI: `ci.yml`
@@ -38,12 +38,12 @@ CD(지속적 배포)는 main에 합쳐진 결과를 사람 손 없이 서버에 
 
 ### e2e job
 
-- `pnpm test:e2e`로 9개를 돌린다. `playwright.config.ts`가 개발 서버를 모드마다 하나씩 띄운다.
+- `pnpm test:e2e`로 11개를 돌린다. `playwright.config.ts`가 개발 서버를 모드마다 하나씩 띄운다.
 
   | 프로젝트 | 개발 서버 | 테스트 |
   | --- | --- | --- |
-  | `mock` | `VITE_API_MODE=mock`, 4179 | `e2e/smoke.spec.ts`(시작 화면) 1개, `e2e/mock/` 기준선 5개(서버 없는 데모 흐름, `/api`로 나가는 요청이 없는지) |
-  | `http` | `VITE_API_MODE=http`, 4180 | `e2e/scenarios/` 3개(직통열차, 일반열차+카드 없음, 사진 503 → 직접 선택). `/api/v1`은 `page.route`로 가로채 MSW 핸들러가 답한다 |
+  | `mock` | `VITE_API_MODE=mock`, 4179 | `e2e/smoke.spec.ts`(시작 화면, Demo 라벨) 2개, `e2e/mock/` 기준선 5개(서버 없는 데모 흐름, `/api`로 나가는 요청이 없는지) |
+  | `http` | `VITE_API_MODE=http`, 4180 | `e2e/scenarios/` 4개(직통열차, 일반열차+카드 없음, 사진 503 → 직접 선택, Live 라벨). `/api/v1`은 `page.route`로 가로채 MSW 핸들러가 답한다 |
 
   `test:e2e` 스크립트가 없으면 설치와 실행 단계를 건너뛰고 통과로 표시하는 조건은 그대로 남아 있다.
 - 브라우저 설치는 캐시를 쓴다. 설치된 `@playwright/test` 버전으로 `~/.cache/ms-playwright`를 캐시하고(키: OS, 아키텍처, Playwright 버전), 버전이 같으면 받는 chromium도 같다.

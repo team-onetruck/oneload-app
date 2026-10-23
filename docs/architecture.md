@@ -111,6 +111,6 @@ app (React, 브라우저)                                    backend (FastAPI /a
 | 헤더 검사 | `scripts/check-header.mjs` | 새 파일의 Date / Author / Purpose 확인 |
 | 타입 생성 | `scripts/gen-api.mjs` (`pnpm gen:api`) | 백엔드 OpenAPI 문서로 `src/api/schema.d.ts` 생성 |
 | 백엔드 흉내 | `src/test/handlers.ts` (MSW) | vitest와 http 모드 E2E가 같이 쓰는 `/api/v1` 핸들러. 409·503·타임아웃 스위치 |
-| E2E | `playwright.config.ts`, `e2e/` (`pnpm e2e`) | 9개. mock 프로젝트(스모크 1 + 기준선 5, 4179)와 http 프로젝트(시나리오 3, 4180, `page.route`로 MSW 응답) |
-| CI | `.github/workflows/ci.yml` | push·PR마다 `pnpm verify`. e2e는 독립 job으로 9개를 돌리고, Playwright 브라우저를 버전별로 캐시해 캐시가 있으면 시스템 라이브러리 설치를 건너뛴다 |
+| E2E | `playwright.config.ts`, `e2e/` (`pnpm e2e`) | 11개. mock 프로젝트(스모크 2 + 기준선 5, 4179)와 http 프로젝트(시나리오 3 + 모드 라벨 1, 4180, `page.route`로 MSW 응답) |
+| CI | `.github/workflows/ci.yml` | push·PR마다 `pnpm verify`. e2e는 독립 job으로 11개를 돌리고, Playwright 브라우저를 버전별로 캐시해 캐시가 있으면 시스템 라이브러리 설치를 건너뛴다 |
 | CD 초안 | `.github/workflows/deploy.yml` | 지금은 수동 실행만. main을 빌드해 macserver로 rsync. 활성화 절차는 `docs/ci-cd.md` |
