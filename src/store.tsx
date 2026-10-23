@@ -2,7 +2,7 @@
 // (idle → needs_clarification → needs_location → needs_confirmation →
 // ready_to_navigate → navigating → arrived) with in-memory mocks.
 // 세션 생성과 채팅은 VITE_API_MODE(기본 http)에 따라 서버 또는 mock 규칙(가짜 세션 서버, assistant.ts)을 쓴다.
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   clearSession, confirmLocation as confirmLocationApi, createSession, getMapGraph, getNavigationState, patchSession, postLocalization,
@@ -25,6 +25,7 @@ import type { LocateResult } from './features/localization/locate'
 import { candidateViews, manualPlaces, mockCandidateViews, mockManualPlaces } from './features/localization/views'
 import type { CandidateView, PlaceView } from './features/localization/views'
 import { createGraphCache } from './features/map/graphCache'
+import { mockGuide } from './features/route/guide'
 import { useRecovery } from './features/recovery/context'
 import type { FailHandlers } from './features/recovery/context'
 import { sendWithRecovery } from './features/recovery/retry'
@@ -612,6 +613,12 @@ function useAppState() {
   // 서버 상태 대신 화면에 진행 중인 경로가 있는지로 판단한다.
   const routeActive = API_MODE === 'mock' ? session?.state === 'navigating' : here !== null && stepIdx < steps.length
 
+  // 경로 화면(노선 보기·거리뷰)이 그리는 모델. 지금은 두 모드 모두 데모 경로(findRoute)로 만든다
+  const guide = useMemo(
+    () => (startNode && dest ? mockGuide(steps, startNode, POIS.find((p) => p.id === dest)!.node) : null),
+    [steps, startNode, dest],
+  )
+
   // 후보·직접 선택 화면이 보는 목록. http 모드는 서버 후보와 지도 그래프(받는 중이면 null), mock 모드는 data.ts
   const candidateList: CandidateView[] =
     API_MODE === 'mock' ? mockCandidateViews(candidates) : located?.kind === 'candidates' ? candidateViews(located.candidates, graph) : []
@@ -624,7 +631,7 @@ function useAppState() {
 
   return {
     lang, setLang, changeLang, langPending, screen, setScreen, session, sessionInfo, applySession, starting, startSession, routeActive,
-    train, dest, destinationPoiId, here, hereNode: localNode(here), steps, startNode, stepIdx, messages, photo,
+    train, dest, destinationPoiId, here, hereNode: localNode(here), guide, stepIdx, messages, photo,
     graph, ensureGraph, candidateList, retakeHint, manualList, manualReason, confirming, demoPhotos,
     failNext, setFailNext, uploadScenario, setUploadScenario, demoOpen, setDemoOpen,
     sendText, sendChip, sendSuggested, retry, pickDestination, startRoute, analyzePhoto, confirmLocation, nextStep, reportLost, reset,

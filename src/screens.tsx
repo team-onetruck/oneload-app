@@ -1,20 +1,20 @@
 import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
-  AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Banknote, BookOpen, Camera, Check, ChevronRight, Footprints,
+  AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpDown, Banknote, BookOpen, Camera, Check, ChevronRight, Footprints,
   ImagePlus, List, MessageCircle, Navigation, RefreshCw, Rotate3d, RotateCcw, Route, ScanLine, Star, Ticket, TimerOff, X,
 } from 'lucide-react'
 import { API_MODE } from './api/mode'
 import { render } from './assistant'
 import type { Rendered } from './assistant'
 import { NODES, POIS, TRAIN_NAME } from './data'
-import type { Lang, NodeId, PhotoScenario, Text } from './data'
+import type { Lang, PhotoScenario, Text } from './data'
 import type { ChatAction, ChatSource, ChatView, ErrorReason } from './features/chat/toViewModel'
 import type { PlaceView } from './features/localization/views'
+import { remainingDistanceM } from './features/route/toSteps'
 import { useRecovery } from './features/recovery/context'
 import type { NoticeReason, Recovery, RecoveryAction, RelocateReason, SessionEndCause } from './features/recovery/recovery'
 import { UI } from './i18n'
-import { totalMeters } from './route'
 import { useApp } from './store'
 import type { Attachment, Msg, SessionState } from './store'
 
@@ -324,7 +324,7 @@ function AssistantMsg({ m, latest }: { m: Msg; latest: boolean }) {
 
 export function Chat() {
   const app = useApp()
-  const { lang, messages, dest } = app
+  const { lang, messages, guide } = app
   const [text, setText] = useState('')
   const [image, setImage] = useState<Attachment | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
@@ -333,7 +333,7 @@ export function Chat() {
   }, [messages])
   const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
   const busy = messages.some((m) => m.pending)
-  const navigating = app.routeActive && dest
+  const navigating = app.routeActive && guide
 
   const submit = () => {
     if (busy || (!text.trim() && !image)) return
@@ -347,7 +347,7 @@ export function Chat() {
       <TopBar />
       {navigating && (
         <button className="resume" onClick={() => app.setScreen('route')}>
-          <Navigation size={16} /> {NODES[dest].name[lang]}
+          <Navigation size={16} /> {placeName(guide.destination, lang)}
           <ChevronRight size={18} />
         </button>
       )}
@@ -638,27 +638,38 @@ export function Destinations() {
 
 /* ---------- Route: the signature line ---------- */
 
-const KIND_ICON = { walk: <Footprints size={18} />, escalator_down: <ArrowDown size={18} />, gate: <Ticket size={18} /> }
+// 서버 step.kind (backend/app/domain/routing.py _step_kind). 모르는 종류는 걷기 아이콘으로 그린다
+const KIND_ICON: Record<string, ReactNode> = {
+  walk: <Footprints size={18} />,
+  gate: <Ticket size={18} />,
+  escalator_down: <ArrowDown size={18} />,
+  escalator_up: <ArrowUp size={18} />,
+  stairs_down: <ArrowDown size={18} />,
+  stairs_up: <ArrowUp size={18} />,
+  elevator: <ArrowUpDown size={18} />,
+}
+const kindIcon = (kind: string) => KIND_ICON[kind] ?? <Footprints size={18} />
 
 export function RouteScreen() {
   const app = useApp()
-  const { lang, steps, stepIdx, startNode, dest, train } = app
+  const { lang, guide, stepIdx, train } = app
   const stationRefs = useRef<(HTMLSpanElement | null)[]>([])
   const lineRef = useRef<HTMLOListElement>(null)
   const [rail, setRail] = useState({ first: 0, last: 0, here: 0 })
   const [view, setView] = useState<'line' | 'street'>('line')
-  const stations: NodeId[] = startNode ? [startNode, ...steps.map((s) => s.edge.to)] : []
+  const stops = guide?.stops ?? []
+  const legs = guide?.legs ?? []
 
   // Track, fill and the "you are here" ring are positioned from the real dot
   // centres, so the ring slides exactly station to station.
   useLayoutEffect(() => {
     const line = lineRef.current
-    const dots = stationRefs.current.slice(0, stations.length)
+    const dots = stationRefs.current.slice(0, stops.length)
     if (!line || !dots.length || dots.some((d) => !d)) return
     const top = line.getBoundingClientRect().top
     const centre = (d: HTMLSpanElement) => d.getBoundingClientRect().top - top + d.offsetHeight / 2
     setRail({ first: centre(dots[0]!), last: centre(dots[dots.length - 1]!), here: centre(dots[stepIdx]!) })
-  }, [stepIdx, steps, lang, stations.length, view])
+  }, [stepIdx, guide, lang, stops.length, view])
 
   useEffect(() => {
     stationRefs.current[stepIdx + 1]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -668,11 +679,11 @@ export function RouteScreen() {
     void loadStreetView()
   }, [])
 
-  if (!dest || !startNode) return null
-  const remaining = steps.slice(stepIdx)
-  const meters = totalMeters(remaining)
+  if (!guide) return null
+  const meters = remainingDistanceM(legs, stepIdx)
   const mins = Math.max(1, Math.ceil(meters / WALK_M_PER_MIN))
-  const lastLeg = stepIdx >= steps.length - 1
+  const lastLeg = stepIdx >= legs.length - 1
+  const leg = legs[stepIdx]
 
   return (
     <main className={`screen route ${view === 'street' ? 'street-mode' : ''}`}>
@@ -684,7 +695,7 @@ export function RouteScreen() {
           <LangToggle onDark />
         </div>
         <p className="route-to">{UI.to[lang]}</p>
-        <h1 className="route-dest">{NODES[dest].name[lang]}</h1>
+        <h1 className="route-dest">{placeName(guide.destination, lang)}</h1>
         <div className="route-meta">
           {train && <span className="train-chip">AREX {TRAIN_NAME[train][lang]}</span>}
           <span className="num">
@@ -701,29 +712,31 @@ export function RouteScreen() {
         </div>
       </header>
 
-      {steps.length === 0 ? (
+      {legs.length === 0 ? (
         <p className="pad muted">{UI.noRoute[lang]}</p>
       ) : view === 'street' ? (
         <div className="sv-wrap">
-          <Suspense fallback={<div className="sv" />}>
-            <StreetView node={stations[stepIdx]} leg={steps[stepIdx]?.edge} lang={lang} />
-          </Suspense>
-          {steps[stepIdx] && (
+          {leg && (
+            <Suspense fallback={<div className="sv" />}>
+              <StreetView leg={leg} lang={lang} />
+            </Suspense>
+          )}
+          {leg && (
             <div className="sv-step">
-              <ol className="sv-progress" aria-label={`${stepIdx + 1} / ${steps.length}`}>
-                {steps.map((_, i) => (
-                  <li key={i} className={i < stepIdx ? 'done' : i === stepIdx ? 'current' : ''} />
+              <ol className="sv-progress" aria-label={`${stepIdx + 1} / ${legs.length}`}>
+                {legs.map((l, i) => (
+                  <li key={l.stepId} className={i < stepIdx ? 'done' : i === stepIdx ? 'current' : ''} />
                 ))}
               </ol>
               <div className="sv-step-row">
-                <span className="leg-icon">{KIND_ICON[steps[stepIdx].edge.kind]}</span>
+                <span className="leg-icon">{kindIcon(leg.kind)}</span>
                 <p>
-                  {steps[stepIdx].edge.text[lang]}
-                  <span className="num leg-m"> {steps[stepIdx].edge.meters} m</span>
+                  {leg.instruction[lang]}
+                  <span className="num leg-m"> {leg.distanceM} m</span>
                 </p>
               </div>
               <p className="sv-next">
-                → {NODES[steps[stepIdx].edge.to].name[lang]} <FloorBadge floor={NODES[steps[stepIdx].edge.to].floor} />
+                → {placeName(leg.to, lang)} {leg.to.floor && <FloorBadge floor={leg.to.floor} />}
               </p>
             </div>
           )}
@@ -733,26 +746,26 @@ export function RouteScreen() {
           <span className="line-track" style={{ top: rail.first, height: rail.last - rail.first }} aria-hidden />
           <span className="line-fill" style={{ top: rail.first, height: rail.here - rail.first }} aria-hidden />
           <span className="here" style={{ transform: `translateY(${rail.here}px)` }} aria-hidden />
-          {stations.map((n, i) => {
+          {stops.map((stop, i) => {
             const state = i < stepIdx ? 'done' : i === stepIdx ? 'current' : 'todo'
-            const leg = steps[i]
-            const prevFloor = i > 0 ? NODES[stations[i - 1]].floor : null
+            const out = legs[i]
+            const prevFloor = i > 0 ? stops[i - 1].floor : null
             return (
-              <li key={`${n}-${i}`} className={`station ${state}`}>
+              <li key={`${stop.nodeId}-${i}`} className={`station ${state}`}>
                 <div className="station-row">
                   <span className="dot" ref={(el) => { stationRefs.current[i] = el }} />
                   <span className="station-name">
-                    {NODES[n].name[lang]}
+                    {placeName(stop, lang)}
                     {state === 'current' && <em className="now-tag">{UI.now[lang]}</em>}
                   </span>
-                  {prevFloor !== NODES[n].floor && <FloorBadge floor={NODES[n].floor} />}
+                  {stop.floor && prevFloor !== stop.floor && <FloorBadge floor={stop.floor} />}
                 </div>
-                {leg && (
+                {out && (
                   <div className={`leg ${state === 'current' ? 'active' : ''}`}>
-                    <span className="leg-icon">{KIND_ICON[leg.edge.kind]}</span>
+                    <span className="leg-icon">{kindIcon(out.kind)}</span>
                     <p>
-                      {leg.edge.text[lang]}
-                      <span className="num leg-m"> {leg.edge.meters} m</span>
+                      {out.instruction[lang]}
+                      <span className="num leg-m"> {out.distanceM} m</span>
                     </p>
                   </div>
                 )}
