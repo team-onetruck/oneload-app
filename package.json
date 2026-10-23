@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "e2e": "playwright test",
+    "test:e2e": "playwright test",
+    "e2e": "pnpm test:e2e",
     "verify": "pnpm check:header && pnpm lint && pnpm typecheck && pnpm test",
     "check:header": "node scripts/check-header.mjs",
     "gen:api": "node scripts/gen-api.mjs"
