@@ -94,9 +94,9 @@ describe('toViewModel', () => {
     expect(v.actions).toEqual(['findMe'])
   })
 
-  it('recapture는 위치 찾기 버튼, confirm_location·reply·none은 버튼 없음', () => {
-    expect(toViewModel(reply({ next_action: 'recapture' })).actions).toEqual(['findMe'])
-    expect(toViewModel(reply({ next_action: 'confirm_location' })).actions).toEqual([])
+  it('recapture는 다시 찍기, confirm_location은 목록에서 위치 고르기, reply·none은 버튼 없음', () => {
+    expect(toViewModel(reply({ next_action: 'recapture' })).actions).toEqual(['retake'])
+    expect(toViewModel(reply({ next_action: 'confirm_location' })).actions).toEqual(['pickLocation'])
     expect(toViewModel(reply({ next_action: 'reply' })).actions).toEqual([])
     expect(toViewModel(reply({ next_action: 'none' })).actions).toEqual([])
   })
@@ -135,30 +135,36 @@ describe('toViewModel', () => {
   })
 })
 
-describe('toErrorView', () => {
-  it('타임아웃과 네트워크 오류는 다시 시도와 목록 선택을 준다', () => {
+describe('toErrorView (recoveryFor 규칙)', () => {
+  it('notice: 타임아웃과 네트워크 오류는 다시 시도와 목록 선택을 준다', () => {
     const timeout = toErrorView(new ApiError(0, 'TIMEOUT', 'timeout', null, { retryable: true }))
     expect(timeout).toMatchObject({ kind: 'error', reason: 'timeout', retryable: true, actions: ['retry', 'pickDest'] })
     const network = toErrorView(new ApiError(0, 'NETWORK', 'offline', null, { retryable: true }))
     expect(network).toMatchObject({ reason: 'network', actions: ['retry', 'pickDest'] })
   })
 
-  it('세션 토큰 오류는 다시 시도 대신 처음부터 시작하게 한다', () => {
-    const v = toErrorView(new ApiError(401, 'SESSION_EXPIRED', 'expired', 'req_1'))
-    expect(v).toMatchObject({ reason: 'session', retryable: false, requestId: 'req_1', actions: ['restart'] })
+  it('notice: 409 REVISION_CONFLICT와 503 AI_SERVICE_UNAVAILABLE은 recoveryFor의 문구 종류를 그대로 쓴다', () => {
+    expect(toErrorView(new ApiError(409, 'REVISION_CONFLICT', 'c', null, { retryable: true }))).toMatchObject({ reason: 'conflict', actions: ['retry', 'restart'] })
+    expect(toErrorView(new ApiError(503, 'AI_SERVICE_UNAVAILABLE', 'v', null, { retryable: true }))).toMatchObject({ reason: 'ai_unavailable', actions: ['pickDest', 'retry'] })
   })
 
-  it('서버가 retryable=false로 준 오류에는 다시 시도 버튼을 만들지 않는다', () => {
-    const v = toErrorView(new ApiError(422, 'INVALID_INPUT', 'bad', 'req_2'))
-    expect(v).toMatchObject({ reason: 'server', retryable: false, actions: ['pickDest'] })
+  it('notice: retryable=false인 서버 오류와 ApiError가 아닌 예외는 목록 선택과 처음으로를 준다', () => {
+    expect(toErrorView(new ApiError(422, 'INVALID_INPUT', 'bad', 'req_2'))).toMatchObject({ reason: 'failed', retryable: false, requestId: 'req_2', actions: ['pickDest', 'restart'] })
+    expect(toErrorView(new Error('boom'))).toMatchObject({ reason: 'failed', retryable: false, requestId: null, actions: ['pickDest', 'restart'] })
   })
 
-  it('서버가 retryable=true로 준 오류에는 다시 시도 버튼을 만든다', () => {
-    const v = toErrorView(new ApiError(503, 'AI_SERVICE_UNAVAILABLE', 'down', null, { retryable: true }))
-    expect(v).toMatchObject({ reason: 'server', actions: ['retry', 'pickDest'] })
+  it('sessionEnded: 401·403·지도 버전 불일치는 다시 보내지 않고 처음부터 시작하게 한다', () => {
+    expect(toErrorView(new ApiError(401, 'SESSION_EXPIRED', 'expired', 'req_1'))).toMatchObject({ reason: 'session', retryable: false, requestId: 'req_1', actions: ['restart'] })
+    for (const [status, code] of [[401, 'SESSION_UNAUTHORIZED'], [403, 'SESSION_FORBIDDEN'], [409, 'MAP_VERSION_MISMATCH']] as const)
+      expect(toErrorView(new ApiError(status, code, code)).actions).toEqual(['restart'])
   })
 
-  it('ApiError가 아닌 예외는 다시 시도 없이 목록 선택만 준다', () => {
-    expect(toErrorView(new Error('boom'))).toMatchObject({ reason: 'server', retryable: false, requestId: null, actions: ['pickDest'] })
+  it('resync: 409 INVALID_STATE는 다시 보내지 않고 처음으로만 남긴다 (화면 이동은 store가 정한다)', () => {
+    expect(toErrorView(new ApiError(409, 'INVALID_STATE', 'state', 'req_3'))).toMatchObject({ reason: 'resync', requestId: 'req_3', actions: ['restart'] })
+  })
+
+  it('relocate: 위치 관련 오류는 위치 찾기 버튼으로 바꾼다', () => {
+    expect(toErrorView(new ApiError(409, 'LOCATION_NOT_CONFIRMED', 'l'))).toMatchObject({ reason: 'location_not_confirmed', actions: ['findMe'] })
+    expect(toErrorView(new ApiError(410, 'LOCALIZATION_EXPIRED', 'e'))).toMatchObject({ reason: 'localization_expired', actions: ['findMe'] })
   })
 })

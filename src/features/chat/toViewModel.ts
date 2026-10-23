@@ -5,11 +5,13 @@
  */
 import { isApiError } from '../../api'
 import type { MessageOut } from '../../api'
+import { recoveryFor } from '../recovery/recovery'
+import type { NoticeReason, RecoveryAction, RelocateReason } from '../recovery/recovery'
 
 export type ReplyStatus = MessageOut['status']
 
-// 말풍선 아래 버튼. retry·pickDest·restart는 서버 값이 아니라 화면이 붙이는 탈출구다.
-export type ChatAction = 'findMe' | 'startRoute' | 'retry' | 'pickDest' | 'restart'
+// 말풍선 아래 버튼. findMe·retake·pickLocation·startRoute는 next_action에서, retry·pickDest·restart는 탈출구 규칙에서 온다.
+export type ChatAction = 'findMe' | 'retake' | 'pickLocation' | 'startRoute' | 'retry' | 'pickDest' | 'restart'
 
 export interface ChatSource {
   id: string
@@ -41,7 +43,8 @@ export interface ReplyView {
   destinationPoiId: string | null
 }
 
-export type ErrorReason = 'timeout' | 'network' | 'session' | 'server'
+// 오류 말풍선의 문구 종류. recoveryFor 결과를 그대로 따른다 (session: 세션 종료, resync: 409 INVALID_STATE)
+export type ErrorReason = NoticeReason | RelocateReason | 'session' | 'resync'
 
 export interface ErrorView {
   kind: 'error'
@@ -53,13 +56,12 @@ export interface ErrorView {
 
 export type ChatView = ReplyView | ErrorView
 
-// next_action → 버튼. reply·none은 버튼 없이 다음 입력을 기다린다.
-// confirm_location은 확인할 위치 후보(localization)가 있어야 해서 이 화면에서는 버튼을 만들지 않는다.
+// next_action → 버튼. 화면을 저절로 넘기지 않고, 답을 읽은 뒤 사용자가 누르게 한다. reply·none은 다음 입력을 기다린다.
 const NEXT_ACTION: Record<MessageOut['next_action'], ChatAction[]> = {
   locate: ['findMe'],
-  recapture: ['findMe'],
+  recapture: ['retake'],
   navigate: ['startRoute'],
-  confirm_location: [],
+  confirm_location: ['pickLocation'],
   reply: [],
   none: [],
 }
@@ -88,13 +90,26 @@ export function toViewModel(res: MessageOut): ReplyView {
   }
 }
 
-// 세션 토큰 문제는 다시 보내도 같은 결과라서 처음부터 시작하게 한다.
-const SESSION_CODES = new Set(['SESSION_UNAUTHORIZED', 'SESSION_EXPIRED', 'SESSION_FORBIDDEN'])
+// 탈출구 규칙은 features/recovery의 recoveryFor 하나로 정한다. 채팅에서 "직접 선택"은 목적지 목록이다.
+const CHAT_ACTION: Record<RecoveryAction, ChatAction> = { retry: 'retry', manual: 'pickDest', home: 'restart' }
+
+// 채팅에서는 다시 보내기와 목적지 목록을 모두 쓸 수 있다.
+const CHAT_AVAILABLE = { retry: true, manual: true }
 
 export function toErrorView(error: unknown): ErrorView {
-  if (!isApiError(error)) return { kind: 'error', reason: 'server', retryable: false, requestId: null, actions: ['pickDest'] }
-  const reason: ErrorReason =
-    error.code === 'TIMEOUT' ? 'timeout' : error.code === 'NETWORK' ? 'network' : SESSION_CODES.has(error.code) ? 'session' : 'server'
-  const actions: ChatAction[] = reason === 'session' ? ['restart'] : error.retryable ? ['retry', 'pickDest'] : ['pickDest']
-  return { kind: 'error', reason, retryable: error.retryable, requestId: error.requestId, actions }
+  const recovery = recoveryFor(error, CHAT_AVAILABLE)
+  const base = { kind: 'error' as const, retryable: isApiError(error) && error.retryable, requestId: isApiError(error) ? error.requestId : null }
+  switch (recovery.type) {
+    // 세션을 더 쓸 수 없다. 다시 보내지 않고 처음부터 시작하게 한다.
+    case 'sessionEnded':
+      return { ...base, reason: 'session', actions: ['restart'] }
+    case 'notice':
+      return { ...base, reason: recovery.reason, actions: recovery.actions.map((a) => CHAT_ACTION[a]) }
+    // 409 INVALID_STATE: 다시 보내지 않는다. store가 navigation-state를 다시 읽어 맞는 화면으로 보낸다.
+    case 'resync':
+      return { ...base, reason: 'resync', actions: recovery.actions.map((a) => CHAT_ACTION[a]) }
+    // 위치를 다시 확인해야 한다. /messages는 이 코드를 내지 않지만, 오면 위치 찾기로 보낸다.
+    case 'relocate':
+      return { ...base, reason: recovery.reason, actions: ['findMe'] }
+  }
 }

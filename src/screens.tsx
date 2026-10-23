@@ -6,15 +6,16 @@ import {
 } from 'lucide-react'
 import { API_MODE } from './api/mode'
 import { render } from './assistant'
-import type { Action, Rendered } from './assistant'
+import type { Rendered } from './assistant'
 import { NODES, POIS, TRAIN_NAME } from './data'
 import type { Floor, Lang, NodeId, PhotoScenario, Text } from './data'
+import type { ChatAction, ChatSource, ChatView, ErrorReason } from './features/chat/toViewModel'
 import { useRecovery } from './features/recovery/context'
 import type { NoticeReason, Recovery, RecoveryAction, RelocateReason, SessionEndCause } from './features/recovery/recovery'
 import { UI } from './i18n'
 import { totalMeters } from './route'
 import { useApp } from './store'
-import type { Msg, SessionState } from './store'
+import type { Attachment, Msg, SessionState } from './store'
 
 // three.js and the panorama viewer are most of the bundle; keep them out of
 // the first load and fetch them once a route is on screen.
@@ -23,12 +24,13 @@ const StreetView = lazy(() => loadStreetView().then((m) => ({ default: m.StreetV
 
 const WALK_M_PER_MIN = 70
 
+// 세션이 있으면 서버 언어도 바꾼다 (store.changeLang). 바꾸는 중에는 다시 누르지 못하게 잠근다
 function LangToggle({ onDark = false }: { onDark?: boolean }) {
-  const { lang, setLang } = useApp()
+  const { lang, changeLang, langPending } = useApp()
   return (
-    <div className={`lang ${onDark ? 'on-dark' : ''}`} role="group" aria-label="Language">
+    <div className={`lang ${onDark ? 'on-dark' : ''}`} role="group" aria-label="Language" aria-busy={langPending}>
       {(['en', 'ko'] as Lang[]).map((l) => (
-        <button key={l} aria-pressed={lang === l} onClick={() => setLang(l)}>
+        <button key={l} aria-pressed={lang === l} disabled={langPending} onClick={() => changeLang(l)}>
           {l === 'en' ? 'EN' : '한'}
         </button>
       ))}
@@ -133,41 +135,116 @@ export function Welcome() {
 
 /* ---------- Chat ---------- */
 
-function Sources({ r, lang }: { r: Rendered; lang: Lang }) {
-  if (r.status === 'cannot_answer')
-    return (
-      <p className="tag-unverified">
-        <AlertTriangle size={15} /> {UI.unverified[lang]}
-      </p>
-    )
-  if (!r.sources?.length) return null
+// 말풍선 하나를 그리는 공통 모양. mock 응답(Rendered)과 서버 응답·오류(ChatView)를 여기로 맞춘다
+interface Bubble {
+  error: boolean
+  body: string
+  items: string[]
+  tip: string | null
+  note: string | null
+  // 서버의 unverified_notes. 문장을 고치지 않고 "Not verified"로 구분해 보여 준다
+  unverified: string[]
+  // cannot_answer: 확인된 답이 없어 추측하지 않았다는 표시
+  refused: boolean
+  sources: ChatSource[]
+  chips: { key: string; label: string; send: () => void }[]
+  actions: ChatAction[]
+}
+
+// 오류 말풍선 문구. 오류 알림 시트와 같은 문구를 쓴다
+const ERROR_TEXT: Record<ErrorReason, Text> = {
+  timeout: UI.errTimeout,
+  network: UI.errNetwork,
+  conflict: UI.errConflict,
+  ai_unavailable: UI.errAiUnavailable,
+  failed: UI.errFailed,
+  location_not_confirmed: UI.errNeedLocation,
+  localization_expired: UI.errPhotoExpired,
+  session: UI.endedForbidden,
+  resync: UI.errResync,
+}
+
+function fromRendered(r: Rendered, lang: Lang, app: ReturnType<typeof useApp>): Bubble {
+  return {
+    error: r.status === 'error',
+    body: r.body,
+    items: r.list ?? [],
+    tip: r.tip ?? null,
+    note: r.note ?? null,
+    unverified: r.unverified ? [r.unverified] : [],
+    refused: r.status === 'cannot_answer',
+    sources: (r.sources ?? []).map((s) => ({ id: s.id, title: s.title[lang], url: s.url ?? null, verifiedAt: s.verifiedAt })),
+    chips: (r.chips ?? []).map((c) => ({ key: c.intent, label: c.label[lang], send: () => app.sendChip(c.label, c.intent) })),
+    actions: r.actions ?? [],
+  }
+}
+
+function fromView(v: ChatView, lang: Lang, app: ReturnType<typeof useApp>): Bubble {
+  if (v.kind === 'error')
+    return { error: true, body: ERROR_TEXT[v.reason][lang], items: [], tip: null, note: null, unverified: [], refused: false, sources: [], chips: [], actions: v.actions }
+  return {
+    error: false,
+    body: v.body,
+    items: v.items,
+    tip: v.tip,
+    note: null,
+    unverified: v.unverified,
+    refused: v.refused,
+    sources: v.sources,
+    chips: v.chips.map((c, i) => ({ key: `${i}-${c.label}`, label: c.label, send: () => app.sendSuggested(c) })),
+    actions: v.actions,
+  }
+}
+
+function Sources({ b, lang }: { b: Bubble; lang: Lang }) {
   return (
-    <ul className="sources">
-      {r.sources.map((s) => (
-        <li key={s.id}>
-          <BookOpen size={14} />
-          <span>
-            {UI.sources[lang]} · {s.url ? <a href={s.url} target="_blank" rel="noreferrer">{s.title[lang]}</a> : s.title[lang]} ·{' '}
-            <span className="nowrap">{UI.checked[lang]} {s.verifiedAt}</span>
-          </span>
-        </li>
-      ))}
-    </ul>
+    <>
+      {b.refused && (
+        <p className="tag-unverified">
+          <AlertTriangle size={15} /> {UI.unverified[lang]}
+        </p>
+      )}
+      {b.sources.length > 0 && (
+        <ul className="sources">
+          {b.sources.map((s) => (
+            <li key={s.id}>
+              <BookOpen size={14} />
+              <span>
+                {UI.sources[lang]} · {s.url ? <a href={s.url} target="_blank" rel="noreferrer">{s.title}</a> : s.title} ·{' '}
+                <span className="nowrap">{UI.checked[lang]} {s.verifiedAt}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   )
 }
 
-const ACTION_ICON: Record<Action, ReactNode> = {
+const ACTION_ICON: Record<ChatAction, ReactNode> = {
   findMe: <Camera size={19} />,
+  retake: <Camera size={19} />,
+  pickLocation: <List size={18} />,
   startRoute: <Navigation size={19} />,
   retry: <RefreshCw size={18} />,
   pickDest: <List size={18} />,
+  restart: <RotateCcw size={18} />,
 }
-const ACTION_LABEL: Record<Action, Text> = { findMe: UI.findMe, startRoute: UI.startRoute, retry: UI.retry, pickDest: UI.pickDest }
+const ACTION_LABEL: Record<ChatAction, Text> = {
+  findMe: UI.findMe,
+  retake: UI.retake,
+  pickLocation: UI.pickOnList,
+  startRoute: UI.startRoute,
+  retry: UI.retry,
+  pickDest: UI.pickDest,
+  restart: UI.newTrip,
+}
+const PRIMARY_ACTIONS = new Set<ChatAction>(['findMe', 'retake', 'startRoute'])
 
 function AssistantMsg({ m, latest }: { m: Msg; latest: boolean }) {
   const app = useApp()
   const { lang } = app
-  if (m.pending || !m.reply)
+  if (m.pending || (!m.reply && !m.view))
     return (
       <div className="msg assistant">
         <span className="avatar" aria-hidden />
@@ -181,53 +258,55 @@ function AssistantMsg({ m, latest }: { m: Msg; latest: boolean }) {
         </p>
       </div>
     )
-  const r = render(m.reply, lang)
-  const doAction = (a: Action) => {
-    if (a === 'findMe') app.setScreen('locate')
+  const b = m.view ? fromView(m.view, lang, app) : fromRendered(render(m.reply!, lang), lang, app)
+  const doAction = (a: ChatAction) => {
+    if (a === 'findMe' || a === 'retake') app.setScreen('locate')
+    if (a === 'pickLocation') app.setScreen('manual')
     if (a === 'startRoute' && app.here) app.startRoute(app.here)
     if (a === 'retry') app.retry()
     if (a === 'pickDest') app.setScreen('destinations')
+    if (a === 'restart') app.reset()
   }
   return (
-    <div className={`msg assistant ${r.status === 'error' ? 'is-error' : ''}`}>
+    <div className={`msg assistant ${b.error ? 'is-error' : ''}`}>
       <span className="avatar" aria-hidden />
       <div className="msg-body">
-        <p>{r.body}</p>
-        {r.list && (
+        <p>{b.body}</p>
+        {b.items.length > 0 && (
           <ol className="answer-list">
-            {r.list.map((li) => (
-              <li key={li}>{li}</li>
+            {b.items.map((li, i) => (
+              <li key={i}>{li}</li>
             ))}
           </ol>
         )}
-        {r.tip && (
+        {b.tip && (
           <p className="tip">
-            <Banknote size={18} /> {r.tip}
+            <Banknote size={18} /> {b.tip}
           </p>
         )}
-        {r.note && <p className="note">{r.note}</p>}
-        {r.unverified && (
-          <p className="unverified">
+        {b.note && <p className="note">{b.note}</p>}
+        {b.unverified.map((note, i) => (
+          <p key={i} className="unverified">
             <AlertTriangle size={16} />
             <span>
-              <b>{UI.unverified[lang]}</b> · {r.unverified}
+              <b>{UI.unverified[lang]}</b> · {note}
             </span>
           </p>
-        )}
-        <Sources r={r} lang={lang} />
-        {latest && r.chips && r.chips.length > 0 && (
+        ))}
+        <Sources b={b} lang={lang} />
+        {latest && b.chips.length > 0 && (
           <div className="chips">
-            {r.chips.map((c) => (
-              <button key={c.intent} className="chip" onClick={() => app.sendChip(c.label, c.intent)}>
-                {c.label[lang]}
+            {b.chips.map((c) => (
+              <button key={c.key} className="chip" onClick={c.send}>
+                {c.label}
               </button>
             ))}
           </div>
         )}
-        {latest && r.actions && (
+        {latest && b.actions.length > 0 && (
           <div className="actions">
-            {r.actions.map((a) => (
-              <button key={a} className={`btn ${a === 'findMe' || a === 'startRoute' ? 'primary' : a === 'retry' ? 'secondary' : 'ghost'}`} onClick={() => doAction(a)}>
+            {b.actions.map((a) => (
+              <button key={a} className={`btn ${PRIMARY_ACTIONS.has(a) ? 'primary' : a === 'retry' ? 'secondary' : 'ghost'}`} onClick={() => doAction(a)}>
                 {ACTION_ICON[a]} {ACTION_LABEL[a][lang]}
               </button>
             ))}
@@ -242,7 +321,7 @@ export function Chat() {
   const app = useApp()
   const { lang, messages, dest } = app
   const [text, setText] = useState('')
-  const [image, setImage] = useState<string | null>(null)
+  const [image, setImage] = useState<Attachment | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
@@ -289,7 +368,7 @@ export function Chat() {
       >
         {image && (
           <div className="attached">
-            <img src={image} alt="" />
+            <img src={image.url} alt="" />
             <button type="button" className="icon-btn small" aria-label="Remove photo" onClick={() => setImage(null)}>
               <X size={16} />
             </button>
@@ -300,7 +379,7 @@ export function Chat() {
             <ImagePlus size={22} />
             <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => {
               const f = e.target.files?.[0]
-              if (f) setImage(URL.createObjectURL(f))
+              if (f) setImage({ url: URL.createObjectURL(f), file: f })
               e.target.value = ''
             }} />
           </label>
