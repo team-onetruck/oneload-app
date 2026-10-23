@@ -7,7 +7,12 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "verify": "pnpm check:header && pnpm lint && pnpm typecheck && pnpm test",
+    "check:header": "node scripts/check-header.mjs",
+    "gen:api": "node scripts/gen-api.mjs"
   },
   "dependencies": {
     "@photo-sphere-viewer/core": "^5.15.1",
@@ -23,8 +28,10 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "openapi-typescript": "^7.13.0",
     "oxlint": "^1.88.0",
     "typescript": "~6.0.3",
-    "vite": "^8.3.4"
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
   }
 }

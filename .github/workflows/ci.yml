@@ -1,0 +1,101 @@
+# Date: 2026-10-23
+# Author: Jung Minkyu
+# Purpose: push와 pull_request마다 pnpm verify를 실행하고, e2e는 별도 job으로 분리하는 CI
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # package.json에 packageManager가 없어서 corepack이 쓸 pnpm 버전을 여기서 고정한다 (로컬과 같은 버전).
+  PNPM_VERSION: 11.13.0
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      # 헤더 검사(scripts/check-header.mjs)가 `git diff main...HEAD`를 쓰므로 전체 이력이 필요하다.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # fetch-depth: 0이어도 main은 origin/main으로만 받아진다. 로컬 main이 없으면 만든다.
+      - name: 헤더 검사용 main 브랜치 준비
+        run: git show-ref --verify --quiet refs/heads/main || git branch main origin/main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: corepack으로 pnpm 설치
+        run: |
+          corepack enable
+          corepack install --global "pnpm@$PNPM_VERSION"
+
+      - name: pnpm store 경로 확인
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: pnpm store 캐시
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm verify
+
+  # verify와 needs로 묶지 않아 서로의 성공·실패에 영향을 주지 않고 각자 결과가 보인다.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # 작업 6에서 test:e2e 스크립트가 생기기 전까지는 건너뛴다.
+      - name: test:e2e 스크립트 확인
+        id: e2e-script
+        run: |
+          if node -e "process.exit(require('./package.json').scripts?.['test:e2e'] ? 0 : 1)"; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::package.json에 test:e2e 스크립트가 없어 e2e를 건너뜁니다."
+          fi
+
+      - name: corepack으로 pnpm 설치
+        if: steps.e2e-script.outputs.present == 'true'
+        run: |
+          corepack enable
+          corepack install --global "pnpm@$PNPM_VERSION"
+
+      - name: pnpm store 경로 확인
+        if: steps.e2e-script.outputs.present == 'true'
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: pnpm store 캐시
+        if: steps.e2e-script.outputs.present == 'true'
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - if: steps.e2e-script.outputs.present == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - if: steps.e2e-script.outputs.present == 'true'
+        run: pnpm test:e2e
