@@ -29,7 +29,7 @@ export default defineConfig({
   // 앱은 휴대폰 화면용이라 모바일 크롬 크기로 본다.
   projects: [
     // 서버 없는 데모 경로가 뜨는지만 본다
-    { name: 'mock', testMatch: 'smoke.spec.ts', use: { ...devices['Pixel 7'], baseURL: `http://localhost:${MOCK_PORT}` } },
+    { name: 'mock', testMatch: ['smoke.spec.ts', 'mock/*.spec.ts'], use: { ...devices['Pixel 7'], baseURL: `http://localhost:${MOCK_PORT}` } },
     // 서버 연동 경로. /api/v1은 page.route로 가로채 MSW 핸들러가 답한다 (e2e/support/mockApi.ts). 실제 백엔드는 필요 없다
     { name: 'http', testMatch: 'scenarios/*.spec.ts', use: { ...devices['Pixel 7'], baseURL: `http://localhost:${HTTP_PORT}` } },
   ],
