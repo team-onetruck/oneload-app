@@ -46,6 +46,7 @@ export interface ErrorBody {
 export interface ApiErrorExtra {
   retryable?: boolean
   details?: Record<string, unknown>
+  idempotencyKey?: string
 }
 
 export class ApiError extends Error {
@@ -55,6 +56,8 @@ export class ApiError extends Error {
   readonly requestId: string | null
   readonly retryable: boolean
   readonly details: Record<string, unknown>
+  // 이 요청에 보낸 Idempotency-Key. 재시도할 때 이 값을 다시 넘겨야 서버가 같은 요청으로 본다. GET처럼 키가 없으면 null
+  readonly idempotencyKey: string | null
 
   constructor(status: number, code: ApiErrorCode, message: string, requestId: string | null = null, extra: ApiErrorExtra = {}) {
     super(message)
@@ -64,6 +67,7 @@ export class ApiError extends Error {
     this.requestId = requestId
     this.retryable = extra.retryable ?? false
     this.details = extra.details ?? {}
+    this.idempotencyKey = extra.idempotencyKey ?? null
   }
 }
 
