@@ -7,8 +7,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { createApiClient } from '../../api/client'
 import { createHttpAdapter } from '../../api/httpAdapter'
 import type { PoisOut } from '../../api/types'
+import { NODES, POIS as DEMO_POIS } from '../../data'
 import { MAP_ID, MAP_VERSION, POIS } from '../../test/fixtures/seoulStation'
-import { categoryText, destinationViews } from './destinations'
+import { mockBackend } from '../../test/handlers'
+import { messageBody, replyEffects } from '../chat/replyEffects'
+import { sendChat } from '../chat/sendChat'
+import type { ChatHooks } from '../chat/sendChat'
+import { categoryText, destinationViews, mockDestinationViews } from './destinations'
 import { createMapCache } from './graphCache'
 
 describe('destinationViews', () => {
@@ -52,5 +57,43 @@ describe('createMapCache', () => {
     expect(load).toHaveBeenCalledTimes(1)
     await cache.get('other-map')
     expect(load).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('mockDestinationViews', () => {
+  it('mock 모드 목록은 data.ts 목적지를 그대로 쓰고, 표 사는 곳은 category로 정한다', () => {
+    const views = mockDestinationViews()
+    expect(views.map((v) => v.poiId)).toEqual(DEMO_POIS.map((p) => p.id))
+    expect(views.find((v) => v.poiId === 'expressDesk')).toMatchObject({ name: NODES.expressDesk.name, floor: 'B2', category: { en: 'Tickets', ko: '승차권' }, tickets: true })
+    expect(views.filter((v) => v.tickets).map((v) => v.poiId)).toEqual(['expressDesk', 'machines'])
+  })
+})
+
+describe('목적지 목록에서 고르기 (MSW)', () => {
+  it('목록을 받고 고른 POI를 selected_poi_id 그대로 /messages에 보내면 서버가 목적지로 정한다', async () => {
+    const bodies: unknown[] = []
+    const client = createApiClient({
+      baseUrl: 'http://api.test/api/v1',
+      storage: null,
+      fetch: (url, init) => {
+        if (url.endsWith('/messages')) bodies.push(JSON.parse(String(init.body)))
+        return globalThis.fetch(url, init)
+      },
+    })
+    const api = createHttpAdapter(client)
+    const created = await api.createSession({ language: 'ko', map_id: MAP_ID, client: { platform: 'web', app_version: 'test', ar_capable: false } })
+    const list = destinationViews(await createMapCache((mapId) => api.searchPois(mapId)).get(created.map_id))
+    const picked = list.find((d) => d.poiId === 'poi-allstop-platform')!
+
+    const replies: Parameters<ChatHooks['onReply']>[0][] = []
+    const hooks: ChatHooks = { fail: vi.fn(), onReply: (r) => replies.push(r), onError: vi.fn(), onRetry: vi.fn(), onResync: vi.fn(), manual: vi.fn() }
+    await sendChat({ api, sessionId: created.session_id, body: messageBody(picked.name.ko, picked.poiId), hooks })
+
+    expect(bodies).toEqual([{ message: '일반열차 승강장', selected_poi_id: 'poi-allstop-platform' }])
+    const effects = replyEffects(replies[0])
+    expect(effects.view.status).toBe('destination_set')
+    expect(effects.destination?.serverPoiId).toBe('poi-allstop-platform')
+    expect(effects.train).toBe('allstop')
+    expect(mockBackend.session(created.session_id)?.destinationPoiId).toBe('poi-allstop-platform')
   })
 })

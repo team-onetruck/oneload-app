@@ -6,9 +6,9 @@ import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef,
 import type { ReactNode } from 'react'
 import {
   clearSession, confirmLocation as confirmLocationApi, createRoute, createSession, getMapGraph, getNavigationState, isApiError, patchSession,
-  postLocalization, postNavigationEvents, sendMessage,
+  postLocalization, postNavigationEvents, searchPois, sendMessage,
 } from './api'
-import type { GraphOut, NavigationEvent, NavigationStateOut, SessionStatus } from './api'
+import type { GraphOut, NavigationEvent, NavigationStateOut, PoisOut, SessionStatus } from './api'
 import { API_MODE } from './api/mode'
 import { classify } from './assistant'
 import type { Intent, Reply, Tip } from './assistant'
@@ -24,7 +24,9 @@ import { sendConfirmation, sendPhoto } from './features/localization/flow'
 import type { LocateResult } from './features/localization/locate'
 import { candidateViews, manualPlaces, mockCandidateViews, mockManualPlaces } from './features/localization/views'
 import type { CandidateView, PlaceView } from './features/localization/views'
-import { createGraphCache } from './features/map/graphCache'
+import { destinationViews, mockDestinationViews } from './features/map/destinations'
+import type { DestinationView } from './features/map/destinations'
+import { createGraphCache, createMapCache } from './features/map/graphCache'
 import { createNavigationEvent } from './features/route/events'
 import type { NavigationEventType } from './features/route/events'
 import { deliverEvents, sendRoute } from './features/route/flow'
@@ -36,7 +38,6 @@ import type { FailHandlers } from './features/recovery/context'
 import { sendWithRecovery } from './features/recovery/retry'
 import { patchLanguage } from './features/session/language'
 import { createMockSessionServer } from './features/session/mockSession'
-import { serverPoiOf } from './features/session/poiBridge'
 import { findRoute } from './route'
 import type { Step } from './route'
 
@@ -138,6 +139,8 @@ function useAppState() {
   const [candidates, setCandidates] = useState<Candidate[]>([])
   // http 모드: 지도 그래프(직접 선택 목록, 후보 이름, 경로 화면의 노드 이름·사진)와 마지막 사진 결과(후보 / 재촬영 / 503 직접 선택)
   const [graph, setGraph] = useState<GraphOut | null>(null)
+  // http 모드: 목적지 목록 (GET /maps/{id}/pois). 목록 화면에 들어올 때 지도마다 한 번 받는다
+  const [pois, setPois] = useState<PoisOut | null>(null)
   const [located, setLocated] = useState<LocateResult | null>(null)
   // 위치 확정 요청을 보내는 중이면 후보·목록 버튼을 잠근다
   const [confirming, setConfirming] = useState(false)
@@ -154,6 +157,8 @@ function useAppState() {
   // 다시 찍었거나 초기화한 뒤에 도착한 옛 사진 결과를 버리기 위한 번호
   const photoSeq = useRef(0)
   const graphCache = useRef(createGraphCache((mapId) => getMapGraph(mapId)))
+  // 검색어 없이 전체 목록을 받는다
+  const poiCache = useRef(createMapCache((mapId) => searchPois(mapId)))
   // '길을 잃었어요' 뒤 위치를 다시 확정하면 같은 목적지로 다시 계산한다 (http 모드)
   const rerouting = useRef(false)
   // 보내지 못한 길안내 이벤트. 다음 이벤트와 함께 보내고, 경로가 바뀌면 버린다 (http 모드)
@@ -411,18 +416,20 @@ function useAppState() {
 
   const retry = () => lastIntent.current && runIntent(lastIntent.current.intent, lastIntent.current.withPhoto)
 
-  // 목적지 목록에서 고르기. http 모드는 이름과 함께 서버 POI id를 selected_poi_id로 보낸다
-  const pickDestination = (poi: PoiId) => {
-    const p = POIS.find((x) => x.id === poi)!
-    const name = NODES[p.node].name
+  // 목적지 목록에서 고르기. http 모드는 이름과 함께 서버 poi_id를 그대로 selected_poi_id로 보낸다
+  const pickDestination = (poiId: string) => {
+    const picked = destinationList?.find((d) => d.poiId === poiId)
+    if (!picked) return
     setScreen('chat')
     say({
-      display: name,
-      message: name[live.current.lang],
-      selectedPoiId: serverPoiOf(poi),
+      display: picked.name,
+      message: picked.name[live.current.lang],
+      selectedPoiId: poiId,
       mock: () => {
+        const p = POIS.find((x) => x.id === poiId)
+        if (!p) return
         setTrain(p.train)
-        chooseDestination(poi)
+        chooseDestination(p.id)
       },
     })
   }
@@ -449,13 +456,25 @@ function useAppState() {
     )
   }
 
-  // 위치 확인 화면들에 들어오면 그래프를 준비한다. 최신 ensureGraph를 ref로 읽어 화면이 바뀔 때만 부른다
-  const loadGraph = useRef(ensureGraph)
+  // http 모드: 목적지 목록을 처음 필요할 때 한 번 받는다. 실패하면 오류 알림에서 다시 시도한다
+  const ensurePois = () => {
+    const { sessionId: sid, sessionInfo: info } = live.current
+    if (API_MODE === 'mock' || !sid || !info) return
+    poiCache.current.get(info.mapId).then(
+      (out) => live.current.sessionId === sid && setPois(out),
+      (error) => live.current.sessionId === sid && recovery.fail(error, { retry: ensurePois }),
+    )
+  }
+
+  // 위치 확인 화면들에 들어오면 그래프를, 목적지 목록 화면에 들어오면 목록을 준비한다.
+  // 최신 함수를 ref로 읽어 화면이 바뀔 때만 부른다
+  const loaders = useRef({ ensureGraph, ensurePois })
   useLayoutEffect(() => {
-    loadGraph.current = ensureGraph
+    loaders.current = { ensureGraph, ensurePois }
   })
   useEffect(() => {
-    if (screen === 'locate' || screen === 'candidates' || screen === 'manual') loadGraph.current()
+    if (screen === 'locate' || screen === 'candidates' || screen === 'manual') loaders.current.ensureGraph()
+    if (screen === 'destinations') loaders.current.ensurePois()
   }, [screen])
 
   // 409 INVALID_STATE 뒤: 다시 읽은 서버 상태로 맞는 화면에 간다. 채팅으로 가면 채팅과 같은 오류 말풍선과 버튼을 남긴다
@@ -744,6 +763,8 @@ function useAppState() {
     photoSeq.current++
     graphCache.current.clear()
     setGraph(null)
+    poiCache.current.clear()
+    setPois(null)
     setLocated(null)
     setConfirming(false)
     setFailNext(false)
@@ -781,13 +802,15 @@ function useAppState() {
   // 마지막 사진이 503이었으면 직접 선택 화면에 안내 한 줄을 보여 준다. 다시 찍거나 확정하면 지워진다
   const manualReason: ManualReason = located?.kind === 'manual' ? located.reason : null
   const manualList: PlaceView[] | null = API_MODE === 'mock' ? mockManualPlaces() : graph ? manualPlaces(graph) : null
+  // 목적지 목록 화면이 보는 목록. http 모드는 서버 POI(받는 중이면 null), mock 모드는 data.ts
+  const destinationList: DestinationView[] | null = API_MODE === 'mock' ? mockDestinationViews() : pois ? destinationViews(pois) : null
   // 데모 사진과 업로드 결과 스위치는 서버로 보낼 파일이 없어 mock 모드에서만 쓴다
   const demoPhotos = API_MODE === 'mock'
 
   return {
     lang, setLang, changeLang, langPending, screen, setScreen, session, sessionInfo, applySession, starting, startSession, routeActive,
     train, dest, destinationPoiId, here, guide, routing, routeError, arrivedPlace, atTickets, stepIdx, messages, photo,
-    graph, ensureGraph, candidateList, retakeHint, manualList, manualReason, confirming, demoPhotos,
+    graph, ensureGraph, destinationList, candidateList, retakeHint, manualList, manualReason, confirming, demoPhotos,
     failNext, setFailNext, uploadScenario, setUploadScenario, demoOpen, setDemoOpen,
     sendText, sendChip, sendSuggested, retry, pickDestination, startRoute, analyzePhoto, confirmLocation, nextStep, reportLost, reset,
   }
