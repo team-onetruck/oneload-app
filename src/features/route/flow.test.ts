@@ -6,6 +6,7 @@
 import { HttpResponse, http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 import { createApiClient } from '../../api/client'
+import { unansweredFirst } from '../../api/fakeFetch'
 import { createHttpAdapter } from '../../api/httpAdapter'
 import type { NavigationStateOut, RouteOut } from '../../api'
 import { GRAPH, MAP_ID, MAP_VERSION } from '../../test/fixtures/seoulStation'
@@ -22,22 +23,11 @@ import { arrowYawDeg, toSteps } from './toSteps'
 const BASE = 'http://api.test/api/v1'
 const EXPRESS_TICKETS = 'poi-express-tickets'
 
-// 서버로 보내지 않고 abort될 때까지 기다린다. 응답이 오지 않는 상황을 클라이언트 쪽에서 만든다.
-// mockBackend.hang은 요청이 undici 연결까지 내려간 뒤 끊겨서, Node 22(undici 6)에서는 abort 직후 같은 주소로 보낸
-// 다음 요청이 가끔 MSW 가로채기를 빠져나가 실제 DNS 조회(getaddrinfo ENOTFOUND api.test)로 실패한다. 그러면 타이머보다 먼저
-// TypeError가 나 NETWORK가 되어 결과가 흔들린다 (CI 플레이크). 이벤트 타임아웃 테스트는 이 방식으로 결정적으로 만든다.
-const noResponse = (signal: AbortSignal | null | undefined) =>
-  new Promise<Response>((_resolve, reject) => {
-    const abort = () => reject(new DOMException('aborted', 'AbortError'))
-    if (signal?.aborted) return abort()
-    signal?.addEventListener('abort', abort)
-  })
-
 // 실제 http 어댑터를 MSW에 붙이고, 경로·이벤트 요청의 Idempotency-Key를 기록한다. 목적지는 /messages로 정한다.
-// unansweredEvents: navigation-events 요청 중 처음 n번은 서버에 닿지 않고 응답도 오지 않는다
+// unansweredEvents: navigation-events 요청 중 처음 n번은 서버에 닿지 않고 응답도 오지 않는다 (fakeFetch의 unansweredFirst)
 async function start({ timeoutMs, unansweredEvents = 0 }: { timeoutMs?: number; unansweredEvents?: number } = {}) {
   const keys = { routes: [] as string[], events: [] as string[] }
-  let unanswered = unansweredEvents
+  const next = unansweredFirst('/navigation-events', unansweredEvents)
   const client = createApiClient({
     baseUrl: BASE,
     storage: null,
@@ -45,14 +35,8 @@ async function start({ timeoutMs, unansweredEvents = 0 }: { timeoutMs?: number; 
     fetch: (url, init) => {
       const key = new Headers(init.headers).get('Idempotency-Key') ?? ''
       if (url.endsWith('/routes')) keys.routes.push(key)
-      if (url.endsWith('/navigation-events')) {
-        keys.events.push(key)
-        if (unanswered > 0) {
-          unanswered -= 1
-          return noResponse(init.signal)
-        }
-      }
-      return globalThis.fetch(url, init)
+      if (url.endsWith('/navigation-events')) keys.events.push(key)
+      return next(url, init)
     },
   })
   const api = createHttpAdapter(client)
