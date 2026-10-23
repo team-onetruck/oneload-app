@@ -22,9 +22,22 @@ import { arrowYawDeg, toSteps } from './toSteps'
 const BASE = 'http://api.test/api/v1'
 const EXPRESS_TICKETS = 'poi-express-tickets'
 
-// 실제 http 어댑터를 MSW에 붙이고, 경로·이벤트 요청의 Idempotency-Key를 기록한다. 목적지는 /messages로 정한다
-async function start({ timeoutMs }: { timeoutMs?: number } = {}) {
+// 서버로 보내지 않고 abort될 때까지 기다린다. 응답이 오지 않는 상황을 클라이언트 쪽에서 만든다.
+// mockBackend.hang은 요청이 undici 연결까지 내려간 뒤 끊겨서, Node 22(undici 6)에서는 abort 직후 같은 주소로 보낸
+// 다음 요청이 가끔 MSW 가로채기를 빠져나가 실제 DNS 조회(getaddrinfo ENOTFOUND api.test)로 실패한다. 그러면 타이머보다 먼저
+// TypeError가 나 NETWORK가 되어 결과가 흔들린다 (CI 플레이크). 이벤트 타임아웃 테스트는 이 방식으로 결정적으로 만든다.
+const noResponse = (signal: AbortSignal | null | undefined) =>
+  new Promise<Response>((_resolve, reject) => {
+    const abort = () => reject(new DOMException('aborted', 'AbortError'))
+    if (signal?.aborted) return abort()
+    signal?.addEventListener('abort', abort)
+  })
+
+// 실제 http 어댑터를 MSW에 붙이고, 경로·이벤트 요청의 Idempotency-Key를 기록한다. 목적지는 /messages로 정한다.
+// unansweredEvents: navigation-events 요청 중 처음 n번은 서버에 닿지 않고 응답도 오지 않는다
+async function start({ timeoutMs, unansweredEvents = 0 }: { timeoutMs?: number; unansweredEvents?: number } = {}) {
   const keys = { routes: [] as string[], events: [] as string[] }
+  let unanswered = unansweredEvents
   const client = createApiClient({
     baseUrl: BASE,
     storage: null,
@@ -32,7 +45,13 @@ async function start({ timeoutMs }: { timeoutMs?: number } = {}) {
     fetch: (url, init) => {
       const key = new Headers(init.headers).get('Idempotency-Key') ?? ''
       if (url.endsWith('/routes')) keys.routes.push(key)
-      if (url.endsWith('/navigation-events')) keys.events.push(key)
+      if (url.endsWith('/navigation-events')) {
+        keys.events.push(key)
+        if (unanswered > 0) {
+          unanswered -= 1
+          return noResponse(init.signal)
+        }
+      }
       return globalThis.fetch(url, init)
     },
   })
@@ -154,7 +173,7 @@ describe('sendRoute', () => {
 })
 
 // 경로를 만들어 둔 세션. 이벤트 테스트가 함께 쓴다
-async function routed(options: { timeoutMs?: number } = {}) {
+async function routed(options: { timeoutMs?: number; unansweredEvents?: number } = {}) {
   const s = await start(options)
   const confirmed = await s.confirmAt('line4-gates')
   const r = hooks()
@@ -174,23 +193,24 @@ describe('deliverEvents', () => {
   })
 
   it('응답이 없으면 처음 요청과 같은 Idempotency-Key로 한 번만 조용히 다시 보낸다', async () => {
-    const { api, sessionId, route, keys } = await routed({ timeoutMs: 50 })
-    mockBackend.hang('navigationEvents', 1)
+    const { api, sessionId, route, keys } = await routed({ timeoutMs: 200, unansweredEvents: 1 })
     const outcome = await deliverEvents({ api, sessionId, routeId: route.route_id, pending: [createNavigationEvent('navigation_started')] })
 
     expect(outcome).toMatchObject({ kind: 'sent', session: { state: 'navigating' } })
     expect(keys.events).toHaveLength(2)
     expect(keys.events[1]).toBe(keys.events[0])
+    expect(mockBackend.handled('navigationEvents')).toBe(1)
   })
 
   it('두 번 다 응답이 없으면 더 보내지 않고 대기열을 그대로 돌려준다', async () => {
-    const { api, sessionId, route, keys } = await routed({ timeoutMs: 50 })
-    mockBackend.hang('navigationEvents', 2)
+    const { api, sessionId, route, keys } = await routed({ timeoutMs: 200, unansweredEvents: 2 })
     const pending = [createNavigationEvent('navigation_started')]
     const outcome = await deliverEvents({ api, sessionId, routeId: route.route_id, pending })
 
     expect(outcome).toMatchObject({ kind: 'failed', error: { code: 'TIMEOUT' }, pending })
     expect(keys.events).toHaveLength(2)
+    expect(keys.events[1]).toBe(keys.events[0])
+    expect(mockBackend.handled('navigationEvents')).toBe(0)
   })
 
   it('키를 재사용하지 못한 도착 재전송이 422면 이미 반영된 것으로 보고 navigation-state로 맞춘다', async () => {
