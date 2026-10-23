@@ -10,6 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "test": "vitest run",
+    "test:e2e": "playwright test",
+    "e2e": "pnpm test:e2e",
     "verify": "pnpm check:header && pnpm lint && pnpm typecheck && pnpm test",
     "check:header": "node scripts/check-header.mjs",
     "gen:api": "node scripts/gen-api.mjs"
@@ -24,10 +26,12 @@
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "msw": "3.0.3",
     "openapi-typescript": "^7.13.0",
     "oxlint": "^1.88.0",
     "typescript": "~6.0.3",

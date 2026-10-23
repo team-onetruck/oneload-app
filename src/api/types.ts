@@ -48,7 +48,7 @@ export interface CallOptions {
 
 // 변경 요청 옵션. 재시도할 때는 처음 요청의 키(ApiError.idempotencyKey)를 넘기고 본문도 똑같이 보낸다.
 // 서버는 POST에서만 키를 보고, 같은 키·경로·토큰·본문이면 저장된 성공 응답을 돌려준다 (backend/app/middleware.py).
-// multipart 본문은 보낼 때마다 경계값이 달라져서, 첫 요청이 이미 성공했다면 409 IDEMPOTENCY_KEY_REUSED가 온다.
+// multipart 본문은 보낼 때마다 경계값이 달라져서, 첫 요청이 이미 성공했다면 422 IDEMPOTENCY_KEY_REUSED가 온다 (backend/app/errors.py).
 export interface MutationOptions extends CallOptions {
   idempotencyKey?: string
 }

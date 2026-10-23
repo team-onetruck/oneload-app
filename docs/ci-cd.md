@@ -39,6 +39,8 @@ CD(지속적 배포)는 main에 합쳐진 결과를 사람 손 없이 서버에 
 ### e2e job
 
 - `package.json`에 `test:e2e` 스크립트가 없으면 설치와 실행 단계를 건너뛰고 통과로 표시된다. 작업 6(Playwright)에서 스크립트가 생기면 그때부터 실제로 돈다.
+- `pnpm install` 다음에 `pnpm exec playwright install --with-deps chromium`으로 브라우저와 시스템 라이브러리를 받는다. 러너에는 둘 다 없다.
+- 실패하면 `test-results/`(실패한 테스트의 트레이스)를 `e2e-test-results` artifact로 올린다(7일 보관). HTML 리포트는 만들지 않는다.
 - verify와 `needs`로 묶지 않았다. 한쪽이 실패해도 다른 쪽 결과를 볼 수 있게 하려는 것이다.
 
 ## 3. CD 초안: `deploy.yml`
