@@ -4,10 +4,8 @@
  * Purpose: 경로 화면(노선 보기·거리뷰)이 그리는 모델. 서버 경로(steps + 지도 그래프)와 데모 경로(data.ts)를 같은 모양으로 바꾼다
  */
 import type { GraphOut, RouteOut } from '../../api/types'
-import { NODES, PANOS } from '../../data'
-import type { NodeId, Text } from '../../data'
+import type { Text } from '../../data'
 import { UI } from '../../i18n'
-import type { Step } from '../../route'
 import type { PlaceView } from '../localization/views'
 import { arrowYawDeg, toSteps } from './toSteps'
 import type { RouteStepView } from './toSteps'
@@ -85,24 +83,4 @@ export function serverGuide(route: ActiveRoute, graph: GraphOut | null): RouteGu
     }
   })
   return { destination: stops[stops.length - 1], stops, legs }
-}
-
-// mock 모드: findRoute(다익스트라) 결과. 데모 데이터에는 서버 화살표가 없어서 사진의 북쪽 + 통로 방향으로 계산한다
-export function mockGuide(steps: Step[], start: NodeId, destination: NodeId): RouteGuide {
-  const place = (id: NodeId): PlaceView => ({ nodeId: id, floor: NODES[id].floor, name: NODES[id].name })
-  const legs = steps.map(({ edge, floorChange }, i): GuideLeg => {
-    const pano = PANOS[edge.from]
-    return {
-      stepId: `s${i + 1}`,
-      kind: edge.kind,
-      distanceM: edge.meters,
-      instruction: edge.text,
-      from: place(edge.from),
-      to: place(edge.to),
-      floorChange,
-      pano: pano ? { src: pano.src, example: pano.example } : null,
-      yawDeg: arrowYawDeg({ arrowYawDeg: null, fallback: pano ? { northYawDeg: pano.northYaw, headingDeg: edge.heading } : null }),
-    }
-  })
-  return { destination: place(destination), stops: [start, ...steps.map((s) => s.edge.to)].map(place), legs }
 }

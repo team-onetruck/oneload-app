@@ -4,6 +4,9 @@
  * Purpose: mock 어댑터가 기존 mock 규칙을 서버 응답 모양(세션 상태·revision, 칩, 후보, 경로, 이벤트)으로 돌려주는지 검증한다
  */
 import { describe, expect, it } from 'vitest'
+import { NODES, PANOS } from '../data'
+import { serverGuide, toActiveRoute } from '../features/route/guide'
+import { UI } from '../i18n'
 import { createMockAdapter, MOCK_MAP_ID, MOCK_MAP_VERSION } from './mockAdapter'
 
 async function start(language: 'en' | 'ko' = 'en') {
@@ -137,6 +140,27 @@ describe('createMockAdapter', () => {
     const patched = await api.patchSession(id, { expected_revision: await revision(), language: 'ko' })
     expect(patched).toMatchObject({ language: 'ko', session: { revision: 2 } })
     expect((await say('How do I pay?')).assistant_message).toBe('열차에 따라 달라요.')
+  })
+
+  it('경로 화면 모델로 그리면 기존 mock 경로와 같은 이름·예시 사진·화살표가 나온다', async () => {
+    const { api, id, say, revision } = await start()
+    await say('Express')
+    await api.confirmLocation(id, { expected_revision: await revision(), method: 'manual', selected_node_id: 'l4gate' })
+    const route = await api.createRoute(id, {
+      expected_revision: await revision(),
+      destination_poi_id: 'expressDesk',
+      map_version: MOCK_MAP_VERSION,
+      start: { type: 'confirmed_node' },
+      reroute: false,
+    })
+    // store처럼 지도 그래프를 같이 넘겨야 화살표 폴백(사진 북쪽 + 통로 방향)을 계산한다
+    const graph = await api.getMapGraph(MOCK_MAP_ID)
+    const guide = serverGuide(toActiveRoute(route, graph), graph)
+
+    expect(guide.destination).toEqual({ nodeId: 'expressDesk', floor: 'B2', name: NODES.expressDesk.name })
+    expect(guide.legs[0].pano).toEqual({ src: PANOS.l4gate!.src, example: UI.svExample })
+    // 사진의 북쪽 + 통로 방향. 4호선 사진(northYaw -80) + 북쪽(0), 대합실 사진(162) + 직통 표 방향(90)
+    expect(guide.legs.map((l) => l.yawDeg)).toEqual([-80, -108])
   })
 
   it('지도와 목적지는 data.ts의 데모 데이터를 서버 모양으로 돌려준다', async () => {

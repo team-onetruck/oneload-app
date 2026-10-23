@@ -1,15 +1,13 @@
 /**
  * Date: 2026-10-23
  * Author: Jung Minkyu
- * Purpose: 경로 화면 모델(serverGuide, mockGuide)이 서버 값과 지도 그래프, 데모 데이터를 화면 모양으로 옮기는지 검증하는 단위 테스트
+ * Purpose: 경로 화면 모델(serverGuide)이 서버 값과 지도 그래프를 화면 모양으로 옮기는지 검증하는 단위 테스트
  */
 import { describe, expect, it } from 'vitest'
 import type { RouteOut } from '../../api/types'
-import { NODES, PANOS } from '../../data'
 import { UI } from '../../i18n'
-import { findRoute } from '../../route'
 import { GRAPH } from '../../test/fixtures/seoulStation'
-import { mockGuide, serverGuide, toActiveRoute } from './guide'
+import { serverGuide, toActiveRoute } from './guide'
 
 // 가짜 백엔드가 4호선 개찰구 → 직통열차 표 사는 곳으로 돌려주는 경로와 같은 모양. 두 번째 단계는 사진이 없다고 둔다
 const route: RouteOut = {
@@ -98,35 +96,5 @@ describe('serverGuide', () => {
     expect(guide.stops.every((s) => s.name === null)).toBe(true)
     expect(guide.legs[0]).toMatchObject({ pano: null, yawDeg: -80 })
     expect(guide.legs[1].yawDeg).toBeNull()
-  })
-})
-
-describe('mockGuide', () => {
-  it('데모 경로를 data.ts의 이름·층·사진으로 그리고, 화살표는 northYaw + heading으로 계산한다', () => {
-    const steps = findRoute('l4gate', 'expressDesk')!
-    const guide = mockGuide(steps, 'l4gate', 'expressDesk')
-
-    expect(guide.stops.map((s) => s.nodeId)).toEqual(['l4gate', 'concourse', 'expressDesk'])
-    expect(guide.destination).toEqual({ nodeId: 'expressDesk', floor: NODES.expressDesk.floor, name: NODES.expressDesk.name })
-    expect(guide.legs[0]).toMatchObject({
-      instruction: steps[0].edge.text,
-      distanceM: steps[0].edge.meters,
-      pano: { src: PANOS.l4gate!.src, example: PANOS.l4gate!.example },
-      yawDeg: -80,
-    })
-    // 대합실 사진(northYaw 162) + 직통 표 방향(heading 90)
-    expect(guide.legs[1].yawDeg).toBe(-108)
-  })
-
-  it('사진이 없는 지점은 사진과 화살표를 비운다', () => {
-    const steps = findRoute('expressDesk', 'expressPlatform')!
-    const [atDesk] = mockGuide(steps, 'expressDesk', 'expressPlatform').legs
-    expect(atDesk).toMatchObject({ pano: null, yawDeg: null })
-  })
-
-  it('경로가 없으면 출발 지점만 있고 단계는 비어 있다', () => {
-    const guide = mockGuide([], 'expressPlatform', 'ktxHall')
-    expect(guide.stops.map((s) => s.nodeId)).toEqual(['expressPlatform'])
-    expect(guide.legs).toEqual([])
   })
 })

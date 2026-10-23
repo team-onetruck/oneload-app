@@ -4,7 +4,6 @@
  * Purpose: 목적지 목록(GET /maps/{map_id}/pois)을 목적지 선택 화면과 도착 화면이 쓰는 모델로 바꾼다
  */
 import type { PoisOut } from '../../api/types'
-import { NODES, POIS } from '../../data'
 import type { Text, TrainType } from '../../data'
 
 export interface DestinationView {
@@ -36,19 +35,6 @@ export function destinationViews(out: PoisOut): DestinationView[] {
     category: categoryText(p.category),
     train: p.train_type ?? null,
     verified: p.verified,
-    tickets: p.category === 'tickets',
-  }))
-}
-
-// mock 모드: data.ts의 데모 목적지. poiId는 data.ts PoiId다
-export function mockDestinationViews(): DestinationView[] {
-  return POIS.map((p) => ({
-    poiId: p.id,
-    name: NODES[p.node].name,
-    floor: NODES[p.node].floor,
-    category: categoryText(p.category),
-    train: p.train,
-    verified: true,
     tickets: p.category === 'tickets',
   }))
 }
