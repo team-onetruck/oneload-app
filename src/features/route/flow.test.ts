@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createApiClient } from '../../api/client'
 import { unansweredFirst } from '../../api/fakeFetch'
 import { createHttpAdapter } from '../../api/httpAdapter'
-import type { NavigationStateOut, RouteOut } from '../../api'
+import type { ApiAdapter, NavigationStateOut, RouteOut } from '../../api'
 import { GRAPH, MAP_ID, MAP_VERSION } from '../../test/fixtures/seoulStation'
 import { mockBackend } from '../../test/handlers'
 import { server } from '../../test/server'
@@ -17,6 +17,7 @@ import { recoveryFor } from '../recovery/recovery'
 import { createNavigationEvent } from './events'
 import { deliverEvents, sendRoute } from './flow'
 import type { RouteHooks } from './flow'
+import { createEventOutbox } from './outbox'
 import { planReroute } from './request'
 import { arrowYawDeg, toSteps } from './toSteps'
 
@@ -245,5 +246,63 @@ describe('재탐색', () => {
     expect(rerouted.path_node_ids).toEqual(['arex-concourse', 'express-tickets'])
     const restarted = await deliverEvents({ api, sessionId, routeId: rerouted.route_id, pending: [createNavigationEvent('navigation_started')] })
     expect(restarted).toMatchObject({ kind: 'sent', session: { state: 'navigating' } })
+  })
+})
+
+// 보낸 이벤트 묶음(종류·id)을 기록하고, gate를 주면 첫 요청의 응답만 gate가 풀릴 때까지 늦춘다 (서버는 이미 처리했다)
+function recordingApi(api: ApiAdapter, gate?: Promise<void>) {
+  const bodies: { type: string; id: string }[][] = []
+  let calls = 0
+  const wrapped: Pick<ApiAdapter, 'postNavigationEvents' | 'getNavigationState'> = {
+    getNavigationState: (sessionId) => api.getNavigationState(sessionId),
+    async postNavigationEvents(sessionId, body, options) {
+      bodies.push(body.events.map((e) => ({ type: e.type, id: e.event_id })))
+      const first = calls++ === 0
+      const out = await api.postNavigationEvents(sessionId, body, options)
+      if (first && gate) await gate
+      return out
+    },
+  }
+  return { api: wrapped, bodies }
+}
+
+describe('길안내 이벤트 대기열 (createEventOutbox + deliverEvents)', () => {
+  it('시작 응답이 늦는 동안 누른 도착은 시작을 다시 넣지 않고, 시작 응답 뒤에 따로 보낸다', async () => {
+    const { api, sessionId, route } = await routed()
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const rec = recordingApi(api, gate)
+    const outbox = createEventOutbox((routeId, batch) => deliverEvents({ api: rec.api, sessionId, routeId, pending: batch }))
+
+    outbox.push(route.route_id, createNavigationEvent('navigation_started'))
+    outbox.push(route.route_id, createNavigationEvent('arrived'))
+    await vi.waitFor(() => expect(mockBackend.session(sessionId)?.state).toBe('navigating'))
+    expect(rec.bodies.map((b) => b.map((e) => e.type))).toEqual([['navigation_started']])
+
+    release()
+    await vi.waitFor(() => expect(mockBackend.session(sessionId)?.state).toBe('arrived'))
+    expect(rec.bodies.map((b) => b.map((e) => e.type))).toEqual([['navigation_started'], ['arrived']])
+    expect(mockBackend.handled('navigationEvents')).toBe(2)
+  })
+
+  it('첫 전송이 끝내 타임아웃이면 시작을 같은 event_id로 다음 묶음(도착)에 다시 넣고, 서버는 둘 다 한 번씩 반영한다', async () => {
+    const { api, sessionId, route } = await routed({ timeoutMs: 200, unansweredEvents: 2 })
+    const rec = recordingApi(api)
+    const outbox = createEventOutbox((routeId, batch) => deliverEvents({ api: rec.api, sessionId, routeId, pending: batch }))
+    const started = createNavigationEvent('navigation_started')
+
+    outbox.push(route.route_id, started)
+    // 처음 요청과 같은 키로 한 번 다시 보낸 뒤 실패로 끝나 대기열로 돌아온다
+    await vi.waitFor(() => expect(outbox.snapshot()).toMatchObject({ waiting: [started], inFlight: [] }))
+    expect(rec.bodies).toHaveLength(2)
+
+    const arrived = createNavigationEvent('arrived')
+    outbox.push(route.route_id, arrived)
+    await vi.waitFor(() => expect(mockBackend.session(sessionId)?.state).toBe('arrived'))
+    expect(rec.bodies[2]).toEqual([
+      { type: 'navigation_started', id: started.event_id },
+      { type: 'arrived', id: arrived.event_id },
+    ])
+    expect(mockBackend.handled('navigationEvents')).toBe(1)
   })
 })
