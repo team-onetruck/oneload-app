@@ -119,6 +119,9 @@ const db = {
 
 const faults: Faults = { revisionConflicts: 0, vision: DEFAULT_VISION, hangs: new Map() }
 
+// 엔드포인트별로 핸들러가 요청을 실제로 처리한 횟수 (오류로 끝난 처리도 센다)
+const handled = new Map<Endpoint, number>()
+
 // 테스트가 서버 쪽 동작을 바꾸거나 상태를 들여다볼 때 쓴다. 매 테스트 뒤 reset()으로 되돌린다 (src/test/setup.ts).
 export const mockBackend = {
   // 다음 n번의 revision 검사(PATCH 세션, 위치 확정, 경로)를 409 REVISION_CONFLICT로 돌려준다.
@@ -137,6 +140,11 @@ export const mockBackend = {
   session(sessionId: string): Readonly<SessionRow> | undefined {
     return db.sessions.get(sessionId)
   },
+  // 이 엔드포인트의 핸들러가 요청을 실제로 처리한 횟수. 같은 Idempotency-Key로 저장된 응답을 돌려줬거나
+  // 422 IDEMPOTENCY_KEY_REUSED로 막은 요청, 멈춘(hang) 요청은 세지 않는다.
+  handled(endpoint: Endpoint): number {
+    return handled.get(endpoint) ?? 0
+  },
   reset() {
     db.sessions.clear()
     db.localizations.clear()
@@ -145,6 +153,7 @@ export const mockBackend = {
     faults.revisionConflicts = 0
     faults.vision = DEFAULT_VISION
     faults.hangs.clear()
+    handled.clear()
   },
 }
 
@@ -221,7 +230,8 @@ interface Ctx {
 }
 
 // 모든 POST에는 Idempotency-Key가 필요하다. 같은 키와 같은 본문이면 저장된 응답을, 본문이 다르면 422를 준다.
-// 지문은 경로 + Authorization + 본문 원문이다. multipart는 요청마다 경계값이 달라 같은 사진이어도 지문이 달라진다.
+// 지문은 경로 + Authorization + 본문 원문이다. multipart는 경계값까지 같아야 같은 요청이다.
+// 앱 클라이언트는 경계값을 키로 정해 같은 키·같은 사진이면 같은 본문을 보낸다 (src/api/multipart.ts).
 async function idempotent(request: Request, requestId: string, run: () => Promise<Reply>): Promise<Response> {
   const key = request.headers.get('Idempotency-Key')
   if (!key || key.length > 64) throw new Fail('BAD_REQUEST', 'Idempotency-Key header is required on POST.')
@@ -249,9 +259,13 @@ function handle(endpoint: Endpoint, run: (ctx: Ctx) => Promise<Reply> | Reply) {
       await delay('infinite')
     }
     const requestId = `req_${hex(6)}`
+    const execute = async () => {
+      handled.set(endpoint, (handled.get(endpoint) ?? 0) + 1)
+      return run({ request, params })
+    }
     try {
-      if (request.method === 'POST') return await idempotent(request, requestId, async () => run({ request, params }))
-      const { status = 200, body } = await run({ request, params })
+      if (request.method === 'POST') return await idempotent(request, requestId, execute)
+      const { status = 200, body } = await execute()
       return jsonResponse(status, JSON.stringify(body), requestId)
     } catch (error) {
       if (error instanceof Fail) return errorResponse(error, requestId)

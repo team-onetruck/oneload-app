@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApiClient, SESSION_STORAGE_KEY } from './client'
 import type { FetchLike, TokenStorage } from './client'
 import { ApiError, isAiServiceUnavailable, isRevisionConflict } from './errors'
+import { readMultipart } from './fakeFetch'
 
 interface Call {
   url: string
@@ -82,15 +83,18 @@ describe('요청 헤더', () => {
     expect(calls.map((c) => c.headers.get('Authorization'))).toEqual(['Bearer tok_1', 'Bearer tok_1'])
   })
 
-  it('JSON 본문에는 Content-Type을 붙이고, FormData는 fetch가 경계값을 정하도록 비워 둔다', async () => {
+  it('JSON 본문에는 Content-Type을 붙이고, FormData는 키로 정한 경계값의 multipart로 직접 직렬화한다', async () => {
     const { fetch, calls } = fakeFetch(json(200, {}), json(200, {}))
     const client = createApiClient({ baseUrl: BASE, fetch, storage: null })
     await client.request('/a', { method: 'POST', json: { message: '안녕' } })
-    await client.request('/b', { method: 'POST', form: new FormData() })
+    const form = new FormData()
+    form.append('map_version', 'v1')
+    await client.request('/b', { method: 'POST', form, idempotencyKey: 'key-1' })
     expect(calls[0].headers.get('Content-Type')).toBe('application/json')
     expect(calls[0].init.body).toBe('{"message":"안녕"}')
-    expect(calls[1].headers.has('Content-Type')).toBe(false)
-    expect(calls[1].init.body).toBeInstanceOf(FormData)
+    expect(calls[1].headers.get('Content-Type')).toBe('multipart/form-data; boundary=oneload-key-1')
+    expect(calls[1].init.body).toBeInstanceOf(Blob)
+    expect((await readMultipart(calls[1].init)).get('map_version')).toBe('v1')
   })
 })
 
@@ -134,6 +138,32 @@ describe('Idempotency-Key', () => {
     await client.request('/sessions/ses_1/messages', { method: 'POST', json: message, idempotencyKey: idempotencyKey ?? undefined })
     expect(calls[1].headers.get('Idempotency-Key')).toBe(idempotencyKey)
     expect(calls[1].init.body).toBe(calls[0].init.body)
+  })
+
+  it('같은 키로 다시 보낸 multipart는 Content-Type과 본문 바이트가 처음과 같고, 키가 다르면 경계값이 다르다', async () => {
+    const { fetch, calls } = fakeFetch(new TypeError('fetch failed'), json(200, {}), json(200, {}))
+    const client = createApiClient({ baseUrl: BASE, fetch, storage: null })
+    const photo = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2])], { type: 'image/jpeg' })
+    // 어댑터처럼 시도마다 FormData를 새로 만든다
+    const form = () => {
+      const f = new FormData()
+      f.append('image', photo)
+      f.append('map_version', 'v1')
+      return f
+    }
+
+    const error = await client.request('/sessions/ses_1/localizations', { method: 'POST', form: form() }).catch((e: unknown) => e)
+    expect(error).toMatchObject({ code: 'NETWORK' })
+    const idempotencyKey = (error as ApiError).idempotencyKey ?? undefined
+    await client.request('/sessions/ses_1/localizations', { method: 'POST', form: form(), idempotencyKey })
+    await client.request('/sessions/ses_1/localizations', { method: 'POST', form: form() })
+
+    const bytes = await Promise.all(calls.map(async (c) => new Uint8Array(await new Response(c.init.body).arrayBuffer())))
+    const contentTypes = calls.map((c) => c.headers.get('Content-Type'))
+    expect(contentTypes[1]).toBe(contentTypes[0])
+    expect(bytes[1]).toEqual(bytes[0])
+    expect(contentTypes[2]).not.toBe(contentTypes[0])
+    expect(bytes[2]).not.toEqual(bytes[0])
   })
 
   it('서버 오류에도 보낸 키를 남기고, 키를 보내지 않은 GET 오류는 null이다', async () => {

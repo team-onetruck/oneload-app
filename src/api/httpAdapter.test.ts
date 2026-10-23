@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApiClient } from './client'
 import type { FetchLike } from './client'
 import type { ApiError } from './errors'
+import { readMultipart } from './fakeFetch'
 import { createHttpAdapter } from './httpAdapter'
 import type { ApiAdapter, CallOptions, MutationOptions } from './types'
 
@@ -65,8 +66,7 @@ describe('createHttpAdapter', () => {
     expect(calls[0].url).toBe(`${BASE}/sessions/ses_1/messages`)
     expect(JSON.parse(calls[0].init.body as string)).toEqual({ message: '돈은 어떻게 내요?', language: null })
 
-    const form = calls[1].init.body as FormData
-    expect(form).toBeInstanceOf(FormData)
+    const form = await readMultipart(calls[1].init)
     expect(form.get('message')).toBe('뭘 눌러요?')
     expect(form.has('language')).toBe(false)
     expect(form.get('image')).toBeInstanceOf(Blob)
@@ -80,7 +80,7 @@ describe('createHttpAdapter', () => {
     await api.postLocalization('ses_1', { image: photo, map_version: '2026-10-22.1', floor_hint: 'B1' })
 
     expect(calls[0].url).toBe(`${BASE}/sessions/ses_1/localizations`)
-    const form = calls[0].init.body as FormData
+    const form = await readMultipart(calls[0].init)
     expect(form.get('map_version')).toBe('2026-10-22.1')
     expect(form.get('floor_hint')).toBe('B1')
     expect(form.has('last_node_id')).toBe(false)
@@ -191,8 +191,7 @@ describe('Idempotency-Key 부여', () => {
       '/sessions/ses_1/feedback',
     ])
     // multipart 업로드도 키를 붙인다.
-    expect(writes[3].init.body).toBeInstanceOf(FormData)
-    expect(writes[4].init.body).toBeInstanceOf(FormData)
+    for (const call of [writes[3], writes[4]]) expect(call.headers.get('Content-Type')).toMatch(/^multipart\/form-data; boundary=/)
 
     for (const call of calls.slice(MUTATION_COUNT * 2)) expect(call.headers.has('Idempotency-Key'), call.url).toBe(false)
   })

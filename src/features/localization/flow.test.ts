@@ -5,8 +5,10 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 import { createApiClient } from '../../api/client'
+import type { FetchLike } from '../../api/client'
+import { losingFirstResponse } from '../../api/fakeFetch'
 import { createHttpAdapter } from '../../api/httpAdapter'
-import type { ConfirmationOut, NavigationStateOut } from '../../api'
+import type { ConfirmationOut, LocalizationOut, NavigationStateOut } from '../../api'
 import { recoveryFor } from '../recovery/recovery'
 import type { FailHandlers } from '../recovery/context'
 import { GRAPH, MAP_ID, MAP_VERSION } from '../../test/fixtures/seoulStation'
@@ -20,7 +22,12 @@ const BASE = 'http://api.test/api/v1'
 const JPEG = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0])], { type: 'image/jpeg' })
 
 // 실제 http 어댑터를 MSW에 붙인다. location-confirmations로 나간 요청의 Idempotency-Key를 기록한다
-async function start({ destination = true, timeoutMs }: { destination?: boolean; timeoutMs?: number } = {}) {
+// fetch를 넘기면 MSW로 보내기 전에 그 함수를 거친다
+async function start({
+  destination = true,
+  timeoutMs,
+  fetch: next = (url, init) => globalThis.fetch(url, init),
+}: { destination?: boolean; timeoutMs?: number; fetch?: FetchLike } = {}) {
   const confirmKeys: string[] = []
   const client = createApiClient({
     baseUrl: BASE,
@@ -28,7 +35,7 @@ async function start({ destination = true, timeoutMs }: { destination?: boolean;
     timeoutMs,
     fetch: (url, init) => {
       if (url.endsWith('/location-confirmations')) confirmKeys.push(new Headers(init.headers).get('Idempotency-Key') ?? '')
-      return globalThis.fetch(url, init)
+      return next(url, init)
     },
   })
   const api = createHttpAdapter(client)
@@ -167,6 +174,36 @@ describe('오류 복구', () => {
     expect(confirmKeys).toHaveLength(2)
     expect(confirmKeys[1]).toBe(confirmKeys[0])
     expect(mockBackend.session(sessionId)).toMatchObject({ confirmedNodeId: 'ktx-hall' })
+  })
+
+  it('서버가 처리한 사진 요청의 응답을 못 받아도, 다시 시도는 같은 바이트로 가서 저장된 200을 그대로 받는다', async () => {
+    const lose = losingFirstResponse('/localizations')
+    const { api, sessionId, req } = await start({ timeoutMs: 200, fetch: lose.fetch })
+    const photo = hooks<LocateResult>()
+    await sendPhoto({ api, req, image: JPEG, hooks: photo.h })
+
+    // 서버는 처리를 끝냈고 응답만 사라졌다
+    expect(photo.failures[0].error).toMatchObject({ code: 'TIMEOUT' })
+    const processed = mockBackend.session(sessionId)!
+    expect(processed.state).toBe('needs_confirmation')
+    const revisionAfterFirst = processed.revision
+
+    const done = photo.next()
+    photo.failures[0].handlers.retry!()
+    await done
+
+    // 같은 키, 같은 Content-Type, 같은 본문 바이트라서 서버가 422 대신 저장된 응답을 돌려준다
+    expect(lose.sent).toHaveLength(2)
+    expect(lose.sent[1].idempotencyKey).toBe(lose.sent[0].idempotencyKey)
+    expect(lose.sent[1].contentType).toBe(lose.sent[0].contentType)
+    expect(lose.sent[1].bytes).toEqual(lose.sent[0].bytes)
+    expect(photo.failures).toHaveLength(1)
+    const result = photo.results[0]
+    if (result?.kind !== 'candidates') throw new Error(`저장된 후보 응답이 와야 한다: ${result?.kind}`)
+    expect(result.localizationId).toBe((lose.lost[0] as LocalizationOut).localization_id)
+    // 두 번 처리되지 않았다
+    expect(mockBackend.handled('localizations')).toBe(1)
+    expect(mockBackend.session(sessionId)!.revision).toBe(revisionAfterFirst)
   })
 
   it('목적지 전(idle)이라 사진 요청이 409 INVALID_STATE면 다시 보내지 않고 서버 상태를 다시 읽는다', async () => {

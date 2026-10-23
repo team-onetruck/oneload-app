@@ -6,6 +6,8 @@
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 import { createApiClient } from '../../api/client'
+import type { FetchLike } from '../../api/client'
+import { losingFirstResponse } from '../../api/fakeFetch'
 import { createHttpAdapter } from '../../api/httpAdapter'
 import type { MessageOut, NavigationStateOut } from '../../api'
 import type { FailHandlers } from '../recovery/context'
@@ -20,14 +22,15 @@ import type { ErrorView } from './toViewModel'
 const BASE = 'http://api.test/api/v1'
 
 // 실제 http 어댑터를 MSW에 붙이고, /messages로 나간 요청의 Idempotency-Key를 기록한다
-async function start() {
+// next를 넘기면 MSW로 보내기 전에 그 함수를 거친다
+async function start(next: FetchLike = (url, init) => globalThis.fetch(url, init)) {
   const keys: string[] = []
   const client = createApiClient({
     baseUrl: BASE,
     storage: null,
     fetch: (url, init) => {
       if (url.endsWith('/messages')) keys.push(new Headers(init.headers).get('Idempotency-Key') ?? '')
-      return globalThis.fetch(url, init)
+      return next(url, init)
     },
   })
   const api = createHttpAdapter(client)
@@ -108,6 +111,34 @@ describe('sendChat', () => {
     expect(t.replies[0].status).toBe('answered')
     expect(keys).toHaveLength(2)
     expect(keys[1]).toBe(keys[0])
+  })
+
+  it('사진을 붙인 메시지를 서버가 처리했는데 응답을 못 받아도, 다시 시도는 같은 바이트로 가서 저장된 답을 받는다', async () => {
+    const lose = losingFirstResponse('/messages')
+    const { api, sessionId } = await start(lose.fetch)
+    const photo = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0])], { type: 'image/jpeg' })
+    const t = hooks()
+    await sendChat({ api, sessionId, body: messageBody('What should I press?', null, photo), hooks: t.h, timeoutMs: 200 })
+
+    // 서버는 메시지를 처리했고 응답만 사라졌다
+    expect(t.failures[0].error).toMatchObject({ code: 'TIMEOUT' })
+    const revisionAfterFirst = mockBackend.session(sessionId)!.revision
+
+    const replied = t.next()
+    t.failures[0].handlers.retry!()
+    await replied
+
+    // 같은 키, 같은 Content-Type, 같은 본문 바이트라서 서버가 422 대신 저장된 답을 돌려준다
+    expect(lose.sent).toHaveLength(2)
+    expect(lose.sent[0].contentType).toMatch(/^multipart\/form-data; boundary=/)
+    expect(lose.sent[1].idempotencyKey).toBe(lose.sent[0].idempotencyKey)
+    expect(lose.sent[1].contentType).toBe(lose.sent[0].contentType)
+    expect(lose.sent[1].bytes).toEqual(lose.sent[0].bytes)
+    expect(t.failures).toHaveLength(1)
+    expect(t.replies[0].message_id).toBe((lose.lost[0] as MessageOut).message_id)
+    // 같은 메시지가 두 번 처리되지 않았다
+    expect(mockBackend.handled('messages')).toBe(1)
+    expect(mockBackend.session(sessionId)!.revision).toBe(revisionAfterFirst)
   })
 
   it('데모 타임아웃은 첫 요청을 보내지 않고 오류로 처리하며, 다시 시도에서 실제로 보낸다', async () => {

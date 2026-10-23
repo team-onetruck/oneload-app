@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { createApiClient } from '../../api/client'
 import type { FetchLike } from '../../api/client'
+import { readMultipart } from '../../api/fakeFetch'
 import { createHttpAdapter } from '../../api/httpAdapter'
 import type { LocalizationOut } from '../../api/types'
 import { locateFromPhoto, requestLocalization, toLocateResult } from './locate'
@@ -72,7 +73,7 @@ describe('locateFromPhoto', () => {
     const [{ url, init }] = server.calls
     expect(url).toBe('/api/v1/sessions/ses_1/localizations')
     expect(init.method).toBe('POST')
-    const form = init.body as FormData
+    const form = await readMultipart(init)
     expect(form.get('map_version')).toBe(MAP_VERSION)
     expect((form.get('image') as Blob).size).toBe(compressed.size)
     // 값이 없는 선택 필드는 보내지 않는다.
@@ -83,7 +84,7 @@ describe('locateFromPhoto', () => {
   it('마지막으로 확정한 노드가 있으면 last_node_id로 함께 보낸다', async () => {
     const server = fakeServer(200, CANDIDATES)
     await locateFromPhoto(server.api, { sessionId: 'ses_1', mapVersion: MAP_VERSION, lastNodeId: 'ktx-hall' }, PHOTO, noCompress)
-    expect((server.calls[0].init.body as FormData).get('last_node_id')).toBe('ktx-hall')
+    expect((await readMultipart(server.calls[0].init)).get('last_node_id')).toBe('ktx-hall')
   })
 
   it('후보 응답이면 위치를 확정하지 않고 후보 결과와 서버 session을 돌려준다', async () => {
@@ -108,8 +109,9 @@ describe('requestLocalization', () => {
 
     const { init } = server.calls[0]
     expect(new Headers(init.headers).get('Idempotency-Key')).toBe('key-first')
-    expect((init.body as FormData).get('image')).toBeInstanceOf(Blob)
-    expect(((init.body as FormData).get('image') as Blob).size).toBe(PHOTO.size)
+    const image = (await readMultipart(init)).get('image')
+    expect(image).toBeInstanceOf(Blob)
+    expect((image as Blob).size).toBe(PHOTO.size)
   })
 
   it('키를 넘기지 않으면 클라이언트가 새 키를 만든다', async () => {

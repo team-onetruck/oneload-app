@@ -4,6 +4,7 @@
  * Purpose: 서버 호출용 fetch 래퍼. 세션 토큰 보관, 인증 헤더, Idempotency-Key, 타임아웃, 오류 변환을 맡는다
  */
 import { ApiError, isErrorBody } from './errors'
+import { boundaryFor, encodeMultipart } from './multipart'
 
 export const DEFAULT_BASE_URL = '/api/v1'
 export const DEFAULT_TIMEOUT_MS = 15_000
@@ -133,8 +134,11 @@ export function createApiClient(options: ClientOptions = {}): ApiClient {
     if (idempotencyKey !== undefined) headers.set('Idempotency-Key', idempotencyKey)
     let body: BodyInit | undefined
     if (req.form) {
-      // multipart 경계값은 fetch가 Content-Type에 넣는다.
-      body = req.form
+      // FormData를 fetch에 그대로 넘기면 보낼 때마다 경계값이 달라져, 같은 키로 재시도해도 서버가 다른 요청으로 보고
+      // 첫 요청이 이미 성공했다면 422 IDEMPOTENCY_KEY_REUSED를 준다. 경계값을 키로 정해 직접 직렬화한다.
+      const multipart = encodeMultipart(req.form, boundaryFor(idempotencyKey ?? newIdempotencyKey()))
+      headers.set('Content-Type', multipart.contentType)
+      body = multipart.body
     } else if (req.json !== undefined) {
       headers.set('Content-Type', 'application/json')
       body = JSON.stringify(req.json)
