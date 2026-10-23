@@ -267,7 +267,7 @@ function AssistantMsg({ m, latest }: { m: Msg; latest: boolean }) {
   const doAction = (a: ChatAction) => {
     if (a === 'findMe' || a === 'retake') app.setScreen('locate')
     if (a === 'pickLocation') app.setScreen('manual')
-    if (a === 'startRoute' && app.hereNode) app.startRoute(app.hereNode)
+    if (a === 'startRoute') app.startRoute()
     if (a === 'retry') app.retry()
     if (a === 'pickDest') app.setScreen('destinations')
     if (a === 'restart') app.reset()
@@ -650,9 +650,39 @@ const KIND_ICON: Record<string, ReactNode> = {
 }
 const kindIcon = (kind: string) => KIND_ICON[kind] ?? <Footprints size={18} />
 
+// 서버 경로를 받는 중이거나 받지 못했을 때. 경로를 지어내지 않고 안내 한 줄과 '길을 잃었어요'만 둔다
+function RouteWaiting() {
+  const app = useApp()
+  const { lang, routing, routeError } = app
+  const noRoute = !routing && routeError === 'not_found'
+  return (
+    <main className="screen route">
+      <header className="route-head">
+        <div className="route-head-top">
+          <button className="icon-btn on-dark" onClick={() => app.setScreen('chat')} aria-label={UI.ask[lang]}>
+            <MessageCircle size={22} />
+          </button>
+          <LangToggle onDark />
+        </div>
+        <p className="route-to">{UI.to[lang]}</p>
+      </header>
+      <p className="pad muted" role="status">
+        {routing ? UI.routeLoading[lang] : noRoute ? UI.noRoute[lang] : null}
+      </p>
+      {noRoute && (
+        <div className="bottom-bar">
+          <button className="btn secondary grow" onClick={app.reportLost}>
+            {UI.lost[lang]}
+          </button>
+        </div>
+      )}
+    </main>
+  )
+}
+
 export function RouteScreen() {
   const app = useApp()
-  const { lang, guide, stepIdx, train } = app
+  const { lang, guide, stepIdx, train, routing, routeError } = app
   const stationRefs = useRef<(HTMLSpanElement | null)[]>([])
   const lineRef = useRef<HTMLOListElement>(null)
   const [rail, setRail] = useState({ first: 0, last: 0, here: 0 })
@@ -679,7 +709,7 @@ export function RouteScreen() {
     void loadStreetView()
   }, [])
 
-  if (!guide) return null
+  if (routing || routeError || !guide) return <RouteWaiting />
   const meters = remainingDistanceM(legs, stepIdx)
   const mins = Math.max(1, Math.ceil(meters / WALK_M_PER_MIN))
   const lastLeg = stepIdx >= legs.length - 1
@@ -780,17 +810,19 @@ export function RouteScreen() {
         <button className="btn secondary" onClick={app.reportLost}>
           {UI.lost[lang]}
         </button>
-        <button className="btn primary grow" onClick={app.nextStep}>
-          {lastLeg ? (
-            <>
-              <Check size={20} /> {UI.arrivedBtn[lang]}
-            </>
-          ) : (
-            <>
-              {UI.next[lang]} <ArrowRight size={20} />
-            </>
-          )}
-        </button>
+        {legs.length > 0 && (
+          <button className="btn primary grow" onClick={app.nextStep}>
+            {lastLeg ? (
+              <>
+                <Check size={20} /> {UI.arrivedBtn[lang]}
+              </>
+            ) : (
+              <>
+                {UI.next[lang]} <ArrowRight size={20} />
+              </>
+            )}
+          </button>
+        )}
       </div>
     </main>
   )
@@ -800,11 +832,10 @@ export function RouteScreen() {
 
 export function Arrived() {
   const app = useApp()
-  // 데모 경로의 도착 노드 (http 모드는 서버 node_id를 nodeBridge로 이은 값)
-  const { lang, hereNode: here } = app
+  // 도착한 장소. http 모드는 서버 node_id와 지도 그래프 이름, mock 모드는 data.ts 노드
+  const { lang, arrivedPlace: place, atTickets } = app
   const [rating, setRating] = useState(0)
-  if (!here) return null
-  const atTickets = here === 'expressDesk' || here === 'machines'
+  if (!place) return null
   const goChat = (intent: 'buy' | 'platform') => {
     app.setScreen('chat')
     app.sendChip(
@@ -822,7 +853,7 @@ export function Arrived() {
       </div>
       <h1 className="title center">{UI.arrivedTitle[lang]}</h1>
       <p className="arrived-place">
-        {NODES[here].name[lang]} <FloorBadge floor={NODES[here].floor} />
+        {placeName(place, lang)} {place.floor && <FloorBadge floor={place.floor} />}
       </p>
       {atTickets ? (
         <div className="stack pad">
