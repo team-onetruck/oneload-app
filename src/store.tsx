@@ -13,6 +13,7 @@ import { NODES, POIS, SCENARIOS } from './data'
 import type { Candidate, Lang, NodeId, PhotoScenario, PoiId, Text, TrainType } from './data'
 import { toErrorView } from './features/chat/toViewModel'
 import type { ErrorView } from './features/chat/toViewModel'
+import { useRecovery } from './features/recovery/context'
 import { createMockSessionServer } from './features/session/mockSession'
 import { findRoute } from './route'
 import type { Step } from './route'
@@ -75,6 +76,8 @@ function useAppState() {
   const nextId = useRef(1)
   const lastIntent = useRef<{ intent: Intent; withPhoto: boolean } | null>(null)
   const mockServer = useRef(createMockSessionServer())
+  // 오류 복구 상태. RecoveryProvider가 AppProvider 바깥에 있어서 store에서도 fail()을 쓸 수 있다
+  const recovery = useRecovery()
   // 초기화 뒤에 도착한 세션 생성 응답을 버리기 위한 번호
   const startSeq = useRef(0)
   // Handlers read the latest values through this ref so delayed replies
@@ -283,6 +286,8 @@ function useAppState() {
     setCandidates([])
     setFailNext(false)
     setDemoOpen(false)
+    // 세션 종료 화면의 '다시 시작', 오류 알림의 '처음으로', 데모 초기화가 모두 여기로 온다
+    recovery.clear()
     setScreen('welcome')
   }
 

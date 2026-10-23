@@ -63,6 +63,14 @@ export const UI = {
   thanks: { en: 'Thanks! This helps us improve.', ko: '고마워요! 개선에 쓸게요.' },
   newTrip: { en: 'Start over', ko: '처음으로' },
 
+  // 세션 종료 화면. 만료 문구는 expired일 때만 쓴다
+  endedExpired: { en: 'Your session ended after a while without use', ko: '오래 사용하지 않아 세션이 끝났어요' },
+  endedUnauthorized: { en: 'We couldn’t verify your session', ko: '세션을 확인할 수 없어요' },
+  endedForbidden: { en: 'This session can’t continue', ko: '이 세션은 이어 갈 수 없어요' },
+  endedMapChanged: { en: 'The station map changed, so you need to start again', ko: '지도가 바뀌어 새로 시작해야 해요' },
+  endedLoss: { en: 'Your destination, confirmed location and route progress can’t be carried over. Starting again takes you back to choosing a language.', ko: '고른 목적지, 확인한 현재 위치, 길안내 진행 상황은 이어서 쓸 수 없어요. 다시 시작하면 언어 선택부터 새로 해요.' },
+  restart: { en: 'Start again', ko: '다시 시작' },
+
   demo: { en: 'Demo', ko: '데모' },
   demoPanel: { en: 'Demo controls', ko: '데모 설정' },
   failNext: { en: 'Next AI request times out', ko: '다음 AI 요청 실패시키기' },

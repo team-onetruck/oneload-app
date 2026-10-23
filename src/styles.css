@@ -1577,6 +1577,30 @@ button {
   fill: currentColor;
 }
 
+/* ---------- Session ended ---------- */
+
+.session-ended {
+  padding-top: calc(var(--safe-top) + 56px);
+}
+.ended-mark {
+  width: 76px;
+  height: 76px;
+  margin: 0 auto 4px;
+  border-radius: 50%;
+  border: 6px solid var(--rule);
+  display: grid;
+  place-items: center;
+  color: var(--ink-2);
+}
+.session-ended .muted {
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+.session-ended .stack {
+  margin-top: auto;
+  padding-bottom: calc(var(--safe-bottom) + 8px);
+}
+
 /* ---------- Demo panel ---------- */
 
 .demo-pill {

@@ -2,13 +2,15 @@ import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from 're
 import type { ReactNode } from 'react'
 import {
   AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Banknote, BookOpen, Camera, Check, ChevronRight, Footprints,
-  ImagePlus, List, MessageCircle, Navigation, RefreshCw, Rotate3d, Route, ScanLine, Star, Ticket, X,
+  ImagePlus, List, MessageCircle, Navigation, RefreshCw, Rotate3d, RotateCcw, Route, ScanLine, Star, Ticket, TimerOff, X,
 } from 'lucide-react'
 import { API_MODE } from './api/mode'
 import { render } from './assistant'
 import type { Action, Rendered } from './assistant'
 import { NODES, POIS, TRAIN_NAME } from './data'
 import type { Floor, Lang, NodeId, PhotoScenario, Text } from './data'
+import { useRecovery } from './features/recovery/context'
+import type { SessionEndCause } from './features/recovery/recovery'
 import { UI } from './i18n'
 import { totalMeters } from './route'
 import { useApp } from './store'
@@ -734,6 +736,44 @@ export function Arrived() {
       )}
     </main>
   )
+}
+
+/* ---------- Session ended ---------- */
+
+const ENDED_TITLE: Record<SessionEndCause, Text> = {
+  expired: UI.endedExpired,
+  unauthorized: UI.endedUnauthorized,
+  forbidden: UI.endedForbidden,
+  map_changed: UI.endedMapChanged,
+}
+
+// 세션을 더 이어 쓸 수 없을 때 보여 준다. 버튼은 '다시 시작' 하나이고, 새 세션은 시작 화면에서 사용자가 시작할 때 만든다.
+export function SessionEndedView({ cause, lang, onRestart }: { cause: SessionEndCause; lang: Lang; onRestart: () => void }) {
+  return (
+    <main className="screen session-ended">
+      <span className="ended-mark" aria-hidden>
+        {cause === 'expired' ? <TimerOff size={30} /> : <AlertTriangle size={30} />}
+      </span>
+      <div className="pad">
+        <h1 className="title center" role="alert">
+          {ENDED_TITLE[cause][lang]}
+        </h1>
+        <p className="muted center">{UI.endedLoss[lang]}</p>
+      </div>
+      <div className="stack pad">
+        <button className="btn primary block" onClick={onRestart}>
+          <RotateCcw size={19} /> {UI.restart[lang]}
+        </button>
+      </div>
+    </main>
+  )
+}
+
+export function SessionEnded() {
+  const { lang, reset } = useApp()
+  const { ended } = useRecovery()
+  if (!ended) return null
+  return <SessionEndedView cause={ended.cause} lang={lang} onRestart={reset} />
 }
 
 /* ---------- Demo panel ---------- */
