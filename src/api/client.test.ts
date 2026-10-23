@@ -140,6 +140,32 @@ describe('Idempotency-Key', () => {
     expect(calls[1].init.body).toBe(calls[0].init.body)
   })
 
+  it('같은 키로 다시 보낸 multipart는 Content-Type과 본문 바이트가 처음과 같고, 키가 다르면 경계값이 다르다', async () => {
+    const { fetch, calls } = fakeFetch(new TypeError('fetch failed'), json(200, {}), json(200, {}))
+    const client = createApiClient({ baseUrl: BASE, fetch, storage: null })
+    const photo = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2])], { type: 'image/jpeg' })
+    // 어댑터처럼 시도마다 FormData를 새로 만든다
+    const form = () => {
+      const f = new FormData()
+      f.append('image', photo)
+      f.append('map_version', 'v1')
+      return f
+    }
+
+    const error = await client.request('/sessions/ses_1/localizations', { method: 'POST', form: form() }).catch((e: unknown) => e)
+    expect(error).toMatchObject({ code: 'NETWORK' })
+    const idempotencyKey = (error as ApiError).idempotencyKey ?? undefined
+    await client.request('/sessions/ses_1/localizations', { method: 'POST', form: form(), idempotencyKey })
+    await client.request('/sessions/ses_1/localizations', { method: 'POST', form: form() })
+
+    const bytes = await Promise.all(calls.map(async (c) => new Uint8Array(await new Response(c.init.body).arrayBuffer())))
+    const contentTypes = calls.map((c) => c.headers.get('Content-Type'))
+    expect(contentTypes[1]).toBe(contentTypes[0])
+    expect(bytes[1]).toEqual(bytes[0])
+    expect(contentTypes[2]).not.toBe(contentTypes[0])
+    expect(bytes[2]).not.toEqual(bytes[0])
+  })
+
   it('서버 오류에도 보낸 키를 남기고, 키를 보내지 않은 GET 오류는 null이다', async () => {
     const { fetch, calls } = fakeFetch(serverError(503, 'AI_SERVICE_UNAVAILABLE'), serverError(404, 'MAP_NOT_FOUND'))
     const client = createApiClient({ baseUrl: BASE, fetch, storage: null, newIdempotencyKey: () => 'auto-key-1' })
