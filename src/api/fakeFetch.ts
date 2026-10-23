@@ -58,9 +58,8 @@ export function losingFirstResponse(suffix: string, next: FetchLike = (url, init
     // 클라이언트 타임아웃과 상관없이 서버 처리는 끝까지 가게 abort 신호를 떼고 보낸다.
     const res = await next(url, { ...init, signal: undefined })
     lost.push(await res.json())
-    return new Promise((_, reject) => {
-      init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
-    })
+    // 서버 처리가 클라이언트 타임아웃보다 늦으면 여기 올 때 이미 끊겨 있다. 그때 리스너만 붙이면 영원히 기다린다
+    return noResponse(init.signal)
   }
   return { fetch, sent, lost }
 }
@@ -78,10 +77,7 @@ export function fakeFetch(replies: FakeReply[]) {
     const reply = queue.shift()
     if (!reply) return Promise.reject(new Error(`준비하지 않은 요청: ${init.method ?? 'GET'} ${url}`))
     if (reply === 'network') return Promise.reject(new TypeError('Failed to fetch'))
-    if (reply === 'timeout')
-      return new Promise((_, reject) => {
-        init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
-      })
+    if (reply === 'timeout') return noResponse(init.signal)
     return Promise.resolve(reply)
   }
   return { fetch, calls }
