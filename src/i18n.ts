@@ -59,6 +59,9 @@ export const UI = {
   svFace: { en: 'Face the arrow', ko: '화살표 방향 보기' },
   svGyro: { en: 'Look around by moving your phone', ko: '폰을 움직여 둘러보기' },
   svMissing: { en: 'No photo for this spot yet. Follow the step below or switch to the line view.', ko: '이 지점은 아직 사진이 없어요. 아래 안내를 따르거나 노선 보기로 바꿔주세요.' },
+  // 서버 사진은 예시 여부(is_example)만 있고 찍은 장소 이름이 없다
+  svExample: { en: 'Example photo · not Seoul Station', ko: '예시 사진 · 서울역 아님' },
+  routeLoading: { en: 'Finding a registered route…', ko: '등록된 경로를 찾는 중…' },
 
   arrivedTitle: { en: 'You’ve arrived', ko: '도착했어요' },
   rate: { en: 'How was the guidance?', ko: '안내는 어땠나요?' },
