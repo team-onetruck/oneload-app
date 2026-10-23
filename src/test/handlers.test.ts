@@ -3,12 +3,13 @@
  * Author: Jung Minkyu
  * Purpose: MSW 핸들러가 백엔드 계약대로 응답하는지, 실제 http 어댑터로 백엔드 API 테스트(backend/tests/test_api.py)와 같은 흐름을 돌려 검증한다
  */
+import { getResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { createApiClient } from '../api/client'
-import { ApiError, isAiServiceUnavailable, isRevisionConflict } from '../api/errors'
+import { isAiServiceUnavailable, isRevisionConflict } from '../api/errors'
 import { createHttpAdapter } from '../api/httpAdapter'
 import { MAP_ID, MAP_VERSION } from './fixtures/seoulStation'
-import { mockBackend } from './handlers'
+import { handlers, mockBackend } from './handlers'
 
 const BASE = 'http://api.test/api/v1'
 const JPEG = () => new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, ...new Array(64).fill(0)])], { type: 'image/jpeg' })
@@ -230,14 +231,26 @@ describe('mockBackend 스위치', () => {
     expect((await api.getNavigationState(id)).session).toEqual(express.session)
   })
 
-  it('hang: 그 엔드포인트의 다음 요청만 응답하지 않아 클라이언트가 TIMEOUT을 내고, 그다음 요청은 응답한다', async () => {
-    const { api, id } = await start('en', 50)
+  it('hang: 그 엔드포인트의 다음 요청만 처리하지 않고 응답도 하지 않으며, 그다음 요청은 응답한다', async () => {
+    const { api, client, id } = await start()
     mockBackend.hang('messages')
 
-    const timedOut = await api.sendMessage(id, { message: 'Express' }).catch((e: unknown) => e)
-    expect(timedOut).toBeInstanceOf(ApiError)
-    expect(timedOut).toMatchObject({ code: 'TIMEOUT', retryable: true })
+    // 클라이언트 타임아웃으로 끊으면 그 연결이 닫히고, 다음 요청의 새 연결이 가끔 MSW를 빠져나가 결과가 흔들린다
+    // (api/fakeFetch.ts unansweredFirst). 그래서 핸들러를 직접 불러 응답이 오지 않는지만 본다.
+    const request = new Request(`${BASE}/sessions/${id}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${client.getSession()!.token}`, 'Idempotency-Key': 'hang-1', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'Express' }),
+    })
+    const answered = await Promise.race([
+      getResponse(handlers, request).then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 50)),
+    ])
+    expect(answered).toBe(false)
+    expect(mockBackend.handled('messages')).toBe(0)
+
     expect((await api.sendMessage(id, { message: 'Express' })).destination).toEqual({ poi_id: 'poi-express-tickets' })
+    expect(mockBackend.handled('messages')).toBe(1)
   })
 
   it('reset: 테스트마다 세션과 스위치가 지워진다', async () => {
