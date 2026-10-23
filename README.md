@@ -2,7 +2,7 @@
 
 Clickable, phone-sized prototype of the Hangil demo client for the Seoul Station / AREX scenario: a foreign visitor who doesn't know how tickets, transit cards and cash work, gets to the right ticket point and platform.
 
-**연결 상태 (2026-10-23, 작업 4 반영).** `VITE_API_MODE`로 mock 모드와 http 모드를 고른다. mock 모드는 서버를 부르지 않고 브라우저 안의 데모 규칙으로 동작한다. http 모드(기본)에서는 세션 생성, 채팅, 언어 전환, 사진 위치 인식, 위치 확정, 경로 안내, 안내 시작·도착·취소가 서버로 동작한다. 기능별 상태는 [백엔드 연결](#백엔드-연결-vite_api_mode) 표를 본다.
+**연결 상태 (2026-10-23, #19 기준).** `VITE_API_MODE`로 mock 모드와 http 모드를 고른다. mock 모드는 서버를 부르지 않고 브라우저 안의 데모 규칙으로 동작한다. http 모드(기본)에서는 세션 생성, 채팅, 언어 전환, 목적지 목록, 사진 위치 인식, 위치 확정, 경로 안내, 안내 시작·도착·취소가 서버로 동작한다. 기능별 상태는 [백엔드 연결](#백엔드-연결-vite_api_mode) 표를 본다.
 
 - Floors of AREX ticket points (B2 express, B3 all-stop) and platforms (B7) follow the [AREX official guide](https://www.airportrailroad.com/co/steUsfGud.do), checked 2026-10-22.
 - Passages, distances, sign wording and "demo doc" sources are placeholders until the field survey.
@@ -86,17 +86,21 @@ pnpm build && rsync -a --delete dist/ macserver:~/hangil-demo/dist/
 
 ## Demo controls
 
-The **Demo** pill (top of the desktop frame; on phones open the URL with `?demo` to get a slim tab on the right edge) shows the session state machine and lets you:
+The **Demo** pill (top of the desktop frame; on phones open the URL with `?demo` to get a slim tab on the right edge) opens the demo panel.
+패널에 보이는 항목과 동작은 모드마다 다르다 (`src/screens.tsx`의 `DemoPanel`, `src/store.tsx`의 `demoPhotos`).
 
-- make the next AI request time out (error + retry path),
-- choose what an uploaded photo resolves to (match / KTX hall / no match),
-- reset the demo.
+| 항목 | mock 모드 | http 모드 |
+| --- | --- | --- |
+| 세션 상태 줄 (state · rev · 모드) | 가짜 세션 서버(`mockSession.ts`)의 상태 | 서버 응답의 `session.state`·`revision`. 세션 id도 함께 보인다 |
+| 다음 AI 요청 실패시키기 (Next AI request times out) | 다음 mock 답변을 오류 말풍선으로 바꾼다 | 다음 채팅 요청(`/messages`)의 첫 시도를 보내지 않고 타임아웃으로 처리한다. 다시 시도는 실제로 보낸다. 사진·경로 요청에는 적용되지 않는다 |
+| 직접 올린 사진의 결과 (Result for uploaded photos) | 보인다. 올린 사진을 환승 안내판 / KTX 맞이방 / 흐린 사진 중 무엇으로 볼지 고른다 | 숨겨진다. 올린 사진은 `POST /sessions/{id}/localizations`로 보내고 결과는 서버 응답을 따른다 |
+| 데모 초기화 (Reset demo) | 처음 화면으로 돌아간다 | 안내 중이면 `navigation_cancelled`를 보낸 뒤 보관한 세션 토큰을 지우고 처음 화면으로 돌아간다 |
 
-http 모드에서 "다음 AI 요청 실패시키기"(Next AI request times out)는 첫 `/messages` 요청을 보내지 않고 타임아웃으로 처리하며, 다시 시도는 실제로 보낸다. 사진 결과 선택은 사진 위치 인식이 아직 로컬이라 두 모드 모두에 적용된다.
+위치 확인 화면의 "또는 데모 사진으로 해보기"(Or try a demo photo) 버튼도 mock 모드에서만 보인다. http 모드에서는 사진을 직접 찍거나 올려야 하고, 지금 서버는 사진 인식이 연결되지 않아(`NoVision`) `503`을 돌려주므로 직접 선택 화면으로 이어진다.
 
 ## Scenario map
 
-아래 흐름은 mock 모드 기준이다. http 모드에서는 채팅 답변과 추천 칩이 서버(`RuleAgent`) 응답을 따르므로 문구와 단계가 다를 수 있다.
+아래 흐름은 mock 모드 기준이다. http 모드에서는 채팅 답변과 추천 칩이 서버(`RuleAgent`) 응답을 따르므로 문구와 단계가 다를 수 있고, 사진 단계의 데모 사진(환승 안내판, KTX 맞이방, 흐린 사진)은 고를 수 없다.
 
 | Flow | Try |
 | --- | --- |

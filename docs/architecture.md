@@ -16,7 +16,7 @@ Purpose: app의 현재(As-Is)와 목표(To-Be) 아키텍처, 기술 스택, 변�
 | agent (로컬 폴더 `infra/`) | Python, OpenAI LLM, FakeLLM 테스트, eval 17문항 | `LLMAgent`, `LLMVision`이 백엔드 규격에 맞게 구현됐지만 아직 연결 안 됨 |
 | 배포 | macserver, Caddy가 `/api/*`를 백엔드로 프록시, Tailscale Funnel | 프론트와 백엔드가 같은 origin |
 
-## 2. 현재 (2026-10-23, 작업 4 반영): 세션·채팅·언어 전환·위치 확인·경로 안내는 서버로 간다
+## 2. 현재 (2026-10-23, #19 기준): 세션·채팅·언어 전환·목적지 목록·위치 확인·경로 안내는 서버로 간다
 
 `VITE_API_MODE`(기본 `http`)로 모드를 고른다. http 모드는 경로와 안내 이벤트도 서버를 부른다.
 
@@ -56,6 +56,7 @@ app (React, 브라우저)                                    backend (FastAPI /a
 | `POST /sessions/{id}/navigation-events` | `postNavigationEvents` | 연결됨: 경로를 받으면 `navigation_started`, 도착하면 `arrived`, 안내 중 처음으로 가면 `navigation_cancelled` (`features/route/events.ts`, `flow.ts`의 `deliverEvents`). 실패해도 안내를 막지 않는다 |
 | `GET /maps/{id}/pois` | `searchPois` | 연결됨: 목적지 목록 화면에 들어오면(도착 화면에서는 표 사는 곳인지 판단할 때) 검색어 없이 지도마다 한 번 받는다 (`features/map/destinations.ts`, `graphCache.ts`의 `createMapCache`). 고른 `poi_id`를 그대로 `/messages`의 `selected_poi_id`로 보낸다 |
 | `GET /health`, `GET /maps`, `POST /sessions/{id}/feedback` | `getHealth` 등 | 화면에서 쓰지 않는다 |
+| (데모 패널) | 없음 | 사진 결과 선택과 위치 확인 화면의 데모 사진은 mock 모드에서만 보인다(`store.tsx`의 `demoPhotos`). http 모드의 사진은 `/localizations` 응답을 따른다 |
 
 - mock 모드는 아직 `ApiAdapter` 구현이 아니라 `store.tsx`의 `API_MODE` 분기로 동작한다. 3장의 mock adapter는 목표 구조다.
 - 단계 진행('다음')은 화면 상태로만 두고 서버에 알리지 않는다. 서버 세션의 `state`·`revision`은 경로와 안내 이벤트 응답으로 바뀐다.
