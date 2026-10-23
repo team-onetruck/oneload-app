@@ -53,7 +53,8 @@ export const UI = {
   ask: { en: 'Ask', ko: '질문' },
   now: { en: 'Now', ko: '지금' },
   routeOnly: { en: 'Uses registered passages only', ko: '등록된 통로만 사용해요' },
-  noRoute: { en: 'No registered route from here. Choose another start point.', ko: '여기서 가는 등록된 경로가 없어요. 다른 출발 위치를 골라주세요.' },
+  // 경로 화면 아래의 '길을 잃었어요' 버튼으로 위치를 다시 확인하게 한다
+  noRoute: { en: 'No registered route from here. Tap “I’m lost” to check where you are again.', ko: '여기서 가는 등록된 경로가 없어요. “길을 잃었어요”를 눌러 위치를 다시 확인해 주세요.' },
   viewLine: { en: 'Line', ko: '노선' },
   viewStreet: { en: 'Street view', ko: '거리뷰' },
   svFace: { en: 'Face the arrow', ko: '화살표 방향 보기' },
