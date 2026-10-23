@@ -8,6 +8,7 @@ import { createApiClient } from './client'
 import type { FetchLike } from './client'
 import type { ApiError } from './errors'
 import { createHttpAdapter } from './httpAdapter'
+import type { ApiAdapter, CallOptions, MutationOptions } from './types'
 
 interface Call {
   url: string
@@ -131,6 +132,72 @@ describe('createHttpAdapter', () => {
   })
 })
 
+const photo = () => new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: 'image/jpeg' })
+
+// 변경 요청 함수를 한 번씩 부른다. 4번째(사진 있는 sendMessage)와 5번째(postLocalization)는 multipart로 나간다.
+const MUTATION_COUNT = 9
+async function callEveryMutation(api: ApiAdapter, options?: MutationOptions) {
+  await api.createSession({ language: 'ko', map_id: 'seoul-station', client: { platform: 'web', app_version: 'test', ar_capable: false } }, options)
+  await api.patchSession('ses_1', { expected_revision: 1, language: 'en' }, options)
+  await api.sendMessage('ses_1', { message: '안녕', language: null }, options)
+  await api.sendMessage('ses_1', { message: '안녕', language: null, image: photo() }, options)
+  await api.postLocalization('ses_1', { image: photo(), map_version: 'v1' }, options)
+  await api.confirmLocation('ses_1', { expected_revision: 2, method: 'manual', selected_node_id: 'line4-gates' }, options)
+  await api.createRoute(
+    'ses_1',
+    { expected_revision: 3, destination_poi_id: 'poi-express-tickets', map_version: 'v1', start: { type: 'confirmed_node' }, reroute: false },
+    options,
+  )
+  await api.postNavigationEvents(
+    'ses_1',
+    { events: [{ event_id: 'ev-1', type: 'arrived', client_timestamp: '2026-10-23T00:00:00Z', context: {} }] },
+    options,
+  )
+  await api.postFeedback('ses_1', { rating: 5, category: 'other', comment: '', allow_image_retention: false }, options)
+}
+
+// 조회 함수를 한 번씩 부른다. 4번째는 검색어가 있는 searchPois다.
+async function callEveryRead(api: ApiAdapter, options?: CallOptions) {
+  await api.getHealth(options)
+  await api.getMaps(options)
+  await api.getMapGraph('seoul-station', options)
+  await api.searchPois('seoul-station', 'express', options)
+  await api.getNavigationState('ses_1', options)
+}
+
+describe('Idempotency-Key 부여', () => {
+  // 서버는 POST에 키가 없으면 인증보다 먼저 400 BAD_REQUEST를 낸다 (backend/app/middleware.py).
+  it('옵션을 넘기지 않거나 timeoutMs만 넘겨도 모든 변경 요청에 새 키가 붙고, 조회에는 붙지 않는다', async () => {
+    const { fetch, calls } = fakeFetch(created)
+    const api = createHttpAdapter(createApiClient({ baseUrl: BASE, fetch, storage: null }))
+
+    await callEveryMutation(api)
+    await callEveryMutation(api, { timeoutMs: 5_000 })
+    await callEveryRead(api)
+
+    const writes = calls.slice(0, MUTATION_COUNT * 2)
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    for (const call of writes) expect(call.headers.get('Idempotency-Key'), `${call.init.method} ${call.url}`).toMatch(uuid)
+    expect(new Set(writes.map((c) => c.headers.get('Idempotency-Key'))).size).toBe(writes.length)
+    expect(writes.map((c) => c.url.replace(BASE, '')).slice(0, MUTATION_COUNT)).toEqual([
+      '/sessions',
+      '/sessions/ses_1',
+      '/sessions/ses_1/messages',
+      '/sessions/ses_1/messages',
+      '/sessions/ses_1/localizations',
+      '/sessions/ses_1/location-confirmations',
+      '/sessions/ses_1/routes',
+      '/sessions/ses_1/navigation-events',
+      '/sessions/ses_1/feedback',
+    ])
+    // multipart 업로드도 키를 붙인다.
+    expect(writes[3].init.body).toBeInstanceOf(FormData)
+    expect(writes[4].init.body).toBeInstanceOf(FormData)
+
+    for (const call of calls.slice(MUTATION_COUNT * 2)) expect(call.headers.has('Idempotency-Key'), call.url).toBe(false)
+  })
+})
+
 describe('재시도 옵션', () => {
   afterEach(() => {
     vi.useRealTimers()
@@ -174,38 +241,17 @@ describe('재시도 옵션', () => {
     const api = createHttpAdapter(client)
     const write = { idempotencyKey: 'key-1', timeoutMs: 40_000 }
     const read = { timeoutMs: 1_000 }
-    const photo = new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: 'image/jpeg' })
 
-    await api.createSession({ language: 'ko', map_id: 'seoul-station', client: { platform: 'web', app_version: 'test', ar_capable: false } }, write)
-    await api.patchSession('ses_1', { expected_revision: 1, language: 'en' }, write)
-    await api.sendMessage('ses_1', { message: '안녕', language: null }, write)
-    await api.sendMessage('ses_1', { message: '안녕', language: null, image: photo }, write)
-    await api.postLocalization('ses_1', { image: photo, map_version: 'v1' }, write)
-    await api.confirmLocation('ses_1', { expected_revision: 2, method: 'manual', selected_node_id: 'line4-gates' }, write)
-    await api.createRoute(
-      'ses_1',
-      { expected_revision: 3, destination_poi_id: 'poi-express-tickets', map_version: 'v1', start: { type: 'confirmed_node' }, reroute: false },
-      write,
-    )
-    await api.postNavigationEvents(
-      'ses_1',
-      { events: [{ event_id: 'ev-1', type: 'arrived', client_timestamp: '2026-10-23T00:00:00Z', context: {} }] },
-      write,
-    )
-    await api.postFeedback('ses_1', { rating: 5, category: 'other', comment: '', allow_image_retention: false }, write)
-    await api.getHealth(read)
-    await api.getMaps(read)
-    await api.getMapGraph('seoul-station', read)
-    await api.searchPois('seoul-station', 'express', read)
-    await api.getNavigationState('ses_1', read)
+    await callEveryMutation(api, write)
+    await callEveryRead(api, read)
 
     const sent = request.mock.calls.map(([, options]) => options)
-    expect(sent).toHaveLength(14)
-    for (const options of sent.slice(0, 9)) expect(options).toMatchObject(write)
-    for (const options of sent.slice(9)) expect(options).toMatchObject(read)
+    expect(sent).toHaveLength(MUTATION_COUNT + 5)
+    for (const options of sent.slice(0, MUTATION_COUNT)) expect(options).toMatchObject(write)
+    for (const options of sent.slice(MUTATION_COUNT)) expect(options).toMatchObject(read)
     // 옵션이 메서드와 검색어를 덮어쓰지 않는다.
     expect(sent[0]).toMatchObject({ method: 'POST' })
     expect(sent[1]).toMatchObject({ method: 'PATCH' })
-    expect(sent[12]).toMatchObject({ query: { query: 'express' } })
+    expect(sent[MUTATION_COUNT + 3]).toMatchObject({ query: { query: 'express' } })
   })
 })
