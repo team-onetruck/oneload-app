@@ -1137,6 +1137,11 @@ button {
   font-weight: 500;
   color: var(--muted);
 }
+/* 서버가 확인하지 않은 목적지 (verified: false) */
+.row-unverified {
+  color: var(--warn);
+  font-weight: 700;
+}
 
 /* ---------- Route ---------- */
 

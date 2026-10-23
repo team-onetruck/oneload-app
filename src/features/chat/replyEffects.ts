@@ -4,8 +4,7 @@
  * Purpose: /messages 응답과 navigation-state를 store가 반영할 값(세션, 목적지, 열차, 화면)으로 바꾸는 순수 함수
  */
 import type { MessageOut, NavigationStateOut, SendMessageIn, SessionStatus } from '../../api'
-import type { PoiId, TrainType } from '../../data'
-import { localPoiOf } from '../session/poiBridge'
+import type { TrainType } from '../../data'
 import { toViewModel } from './toViewModel'
 import type { ChatAction, ReplyView } from './toViewModel'
 
@@ -13,8 +12,8 @@ export interface ReplyEffects {
   view: ReplyView
   // 세션 state·revision은 응답 값을 그대로 쓴다
   session: SessionStatus
-  // 서버가 목적지를 정했을 때만 있다. local은 데모 경로(data.ts)의 목적지이고, 모르는 POI면 null
-  destination: { serverPoiId: string; local: PoiId | null } | null
+  // 서버가 목적지를 정했을 때만 있다. 서버 poi_id 그대로다
+  destination: string | null
   // 서버가 기억하는 열차 종류. 아직 모르면 null
   train: TrainType | null
   // relocalize: 서버가 확정 위치를 지웠으므로 화면의 현재 위치도 지운다
@@ -26,7 +25,7 @@ export function replyEffects(res: MessageOut): ReplyEffects {
   return {
     view: toViewModel(res),
     session: res.session,
-    destination: poiId ? { serverPoiId: poiId, local: localPoiOf(poiId) } : null,
+    destination: poiId ?? null,
     train: res.slots.train_type === 'unknown' ? null : res.slots.train_type,
     clearLocation: res.status === 'relocalize',
   }

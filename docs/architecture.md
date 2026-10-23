@@ -26,7 +26,7 @@ app (React, 브라우저)                                    backend (FastAPI /a
       ↓
   store.tsx     상태. VITE_API_MODE로 http / mock 분기
       │
-      ├─ [http] 세션 생성 · 채팅 · 언어 전환 · 사진 위치 · 위치 확정 · 경로 · 안내 이벤트
+      ├─ [http] 세션 생성 · 채팅 · 언어 전환 · 목적지 목록 · 사진 위치 · 위치 확정 · 경로 · 안내 이벤트
       │     features/session, chat, recovery, localization, map, route
       │     → src/api (http adapter, fetch)  ──────────▶  POST /sessions
       │                                                   POST /sessions/{id}/messages
@@ -37,6 +37,7 @@ app (React, 브라우저)                                    backend (FastAPI /a
       │                                                   POST /sessions/{id}/routes
       │                                                   POST /sessions/{id}/navigation-events
       │                                                   GET  /maps/{id}/graph
+      │                                                   GET  /maps/{id}/pois
       │
       └─ [mock] 전부 로컬
             features/session/mockSession.ts, assistant.ts, route.ts, data.ts
@@ -53,7 +54,8 @@ app (React, 브라우저)                                    backend (FastAPI /a
 | `GET /maps/{id}/graph` | `getMapGraph` | 연결됨: 위치 확인 화면이나 경로 요청 때 한 번 받아 직접 선택 목록, 후보 이름, 경로 화면의 노드 이름·사진, 경로 요청의 `map_version`에 쓴다 (`features/map/graphCache.ts`) |
 | `POST /sessions/{id}/routes` | `createRoute` | 연결됨: 위치 확정 뒤, 채팅의 "길안내 시작", 길을 잃은 뒤 위치를 다시 확정했을 때(`reroute: true`) (`features/route/flow.ts`). 응답 steps는 `toSteps`·`guide`로 화면 모델이 된다 |
 | `POST /sessions/{id}/navigation-events` | `postNavigationEvents` | 연결됨: 경로를 받으면 `navigation_started`, 도착하면 `arrived`, 안내 중 처음으로 가면 `navigation_cancelled` (`features/route/events.ts`, `flow.ts`의 `deliverEvents`). 실패해도 안내를 막지 않는다 |
-| `GET /health`, `GET /maps`, `GET /maps/{id}/pois`, `POST /sessions/{id}/feedback` | `getHealth` 등 | 화면에서 쓰지 않는다 |
+| `GET /maps/{id}/pois` | `searchPois` | 연결됨: 목적지 목록 화면에 들어오면(도착 화면에서는 표 사는 곳인지 판단할 때) 검색어 없이 지도마다 한 번 받는다 (`features/map/destinations.ts`, `graphCache.ts`의 `createMapCache`). 고른 `poi_id`를 그대로 `/messages`의 `selected_poi_id`로 보낸다 |
+| `GET /health`, `GET /maps`, `POST /sessions/{id}/feedback` | `getHealth` 등 | 화면에서 쓰지 않는다 |
 
 - mock 모드는 아직 `ApiAdapter` 구현이 아니라 `store.tsx`의 `API_MODE` 분기로 동작한다. 3장의 mock adapter는 목표 구조다.
 - 단계 진행('다음')은 화면 상태로만 두고 서버에 알리지 않는다. 서버 세션의 `state`·`revision`은 경로와 안내 이벤트 응답으로 바뀐다.

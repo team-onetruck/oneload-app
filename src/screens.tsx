@@ -7,7 +7,7 @@ import {
 import { API_MODE } from './api/mode'
 import { render } from './assistant'
 import type { Rendered } from './assistant'
-import { NODES, POIS, TRAIN_NAME } from './data'
+import { TRAIN_NAME } from './data'
 import type { Lang, PhotoScenario, Text } from './data'
 import type { ChatAction, ChatSource, ChatView, ErrorReason } from './features/chat/toViewModel'
 import type { PlaceView } from './features/localization/views'
@@ -609,29 +609,37 @@ export function Manual() {
   )
 }
 
+// 목적지 목록. http 모드는 GET /maps/{id}/pois, mock 모드는 data.ts (store.destinationList)
 export function Destinations() {
   const app = useApp()
-  const { lang } = app
+  const { lang, destinationList } = app
   return (
     <main className="screen list-screen">
       <TopBar onBack={() => app.setScreen('chat')} title={UI.destTitle[lang]} />
-      <ul className="rows">
-        {POIS.map((p) => (
-          <li key={p.id}>
-            <button className="row" onClick={() => app.pickDestination(p.id)}>
-              <span className="ring" aria-hidden />
-              <span className="row-name">
-                {NODES[p.node].name[lang]}
-                <small>
-                  {p.category[lang]}
-                  {p.train && ` · ${TRAIN_NAME[p.train][lang]}`}
-                </small>
-              </span>
-              <FloorBadge floor={NODES[p.node].floor} />
-            </button>
-          </li>
-        ))}
-      </ul>
+      {destinationList ? (
+        <ul className="rows">
+          {destinationList.map((d) => (
+            <li key={d.poiId}>
+              <button className="row" onClick={() => app.pickDestination(d.poiId)}>
+                <span className="ring" aria-hidden />
+                <span className="row-name">
+                  {d.name[lang]}
+                  <small>
+                    {d.category[lang]}
+                    {d.train && ` · ${TRAIN_NAME[d.train][lang]}`}
+                    {!d.verified && <span className="row-unverified"> · {UI.unverified[lang]}</span>}
+                  </small>
+                </span>
+                <FloorBadge floor={d.floor} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted center" role="status">
+          {UI.loadingPlaces[lang]}
+        </p>
+      )}
     </main>
   )
 }
