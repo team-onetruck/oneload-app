@@ -24,6 +24,7 @@ import type {
 import { GRAPH, MAP_ID, MAP_SUMMARY, MAP_VERSION, POIS } from './fixtures/seoulStation'
 
 // 백엔드 동작의 근거는 backend/app 아래 파일이다. 파일 이름을 각 부분 주석에 적어 둔다.
+// 실서버는 사진 인식이 아직 연결되지 않아(NoVision) localizations가 항상 503이다. 여기서는 후보를 기본으로 돌려주고 503은 mockBackend.setVision('unavailable')로 켠다.
 
 type Schemas = components['schemas']
 type Lang = 'en' | 'ko'
