@@ -202,6 +202,7 @@ describe('오류 복구', () => {
     if (result?.kind !== 'candidates') throw new Error(`저장된 후보 응답이 와야 한다: ${result?.kind}`)
     expect(result.localizationId).toBe((lose.lost[0] as LocalizationOut).localization_id)
     // 두 번 처리되지 않았다
+    expect(mockBackend.handled('localizations')).toBe(1)
     expect(mockBackend.session(sessionId)!.revision).toBe(revisionAfterFirst)
   })
 

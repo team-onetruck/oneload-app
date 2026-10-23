@@ -137,6 +137,7 @@ describe('sendChat', () => {
     expect(t.failures).toHaveLength(1)
     expect(t.replies[0].message_id).toBe((lose.lost[0] as MessageOut).message_id)
     // 같은 메시지가 두 번 처리되지 않았다
+    expect(mockBackend.handled('messages')).toBe(1)
     expect(mockBackend.session(sessionId)!.revision).toBe(revisionAfterFirst)
   })
 
