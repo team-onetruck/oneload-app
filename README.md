@@ -2,7 +2,7 @@
 
 Clickable, phone-sized prototype of the Hangil demo client for the Seoul Station / AREX scenario: a foreign visitor who doesn't know how tickets, transit cards and cash work, gets to the right ticket point and platform.
 
-**연결 상태 (2026-10-23, 작업 3 반영).** `VITE_API_MODE`로 mock 모드와 http 모드를 고른다. mock 모드는 서버를 부르지 않고 브라우저 안의 데모 규칙으로 동작한다. http 모드(기본)에서는 세션 생성, 채팅, 언어 전환, 사진 위치 인식, 위치 확정이 서버로 동작하고, 경로 안내는 아직 브라우저 안의 데모 데이터로 동작한다(작업 4에서 연결 중이며, 머지 후 이 문장을 갱신한다). 기능별 상태는 [백엔드 연결](#백엔드-연결-vite_api_mode) 표를 본다.
+**연결 상태 (2026-10-23, 작업 4 반영).** `VITE_API_MODE`로 mock 모드와 http 모드를 고른다. mock 모드는 서버를 부르지 않고 브라우저 안의 데모 규칙으로 동작한다. http 모드(기본)에서는 세션 생성, 채팅, 언어 전환, 사진 위치 인식, 위치 확정, 경로 안내, 안내 시작·도착·취소가 서버로 동작한다. 기능별 상태는 [백엔드 연결](#백엔드-연결-vite_api_mode) 표를 본다.
 
 - Floors of AREX ticket points (B2 express, B3 all-stop) and platforms (B7) follow the [AREX official guide](https://www.airportrailroad.com/co/steUsfGud.do), checked 2026-10-22.
 - Passages, distances, sign wording and "demo doc" sources are placeholders until the field survey.
@@ -12,6 +12,7 @@ Clickable, phone-sized prototype of the Hangil demo client for the Seoul Station
 The route screen has a **Line / Street view** toggle. Street view shows a 360° photo of the current point with a floor arrow toward the next one; **Next** steps to the next photo.
 
 - Each node stores one panorama and `northYaw` (where map north sits in the photo). The arrow angle is `northYaw + leg heading`, so no per-route arrow data is stored.
+- http 모드는 서버 경로 단계의 `arrow_yaw_deg`(서버가 사진의 북쪽 + 통로 방향으로 계산)를 그대로 쓰고, 사진 주소는 `pano_id`로 `GET /maps/{id}/graph`의 `image_url`을 찾는다. 서버 값이 없을 때만 그래프의 `north_yaw_deg + heading_deg`로 계산한다. 서버 사진은 예시 여부(`is_example`)만 있어서 "예시 사진 · 서울역 아님" 공통 문구를 붙인다.
 - The photos in `public/panos/` are **CC0 samples of other stations** from [Poly Haven](https://polyhaven.com) (Hamburg Hbf, a subway passage, Amsterdam Noord and Vijzelgracht), labelled "Example photo" on screen. Replace them with the Seoul Station field shoot; faces must be blurred before publishing.
 - Points without a photo show a "no photo yet" panel; ticket counters and machines have none yet.
 
@@ -39,16 +40,16 @@ http 모드의 기능별 상태 (`src/store.tsx` 기준):
 | 세션 시작 ("Start") | 서버 연결됨 | `POST /sessions` |
 | 채팅 (입력, 칩, 추천 답변) | 서버 연결됨 | `POST /sessions/{id}/messages`. 답변·목록·출처와 `unverified_notes`("Not verified", 한국어 화면은 "확인되지 않음")는 서버 응답을 표시한다. 사진을 붙이면 JPEG 2MB 이하로 줄여 multipart로 보낸다. 지금 단계에서 할 수 없는 요청(`INVALID_STATE`)이면 `GET /sessions/{id}/navigation-state`로 상태를 다시 읽는다 |
 | 목적지 목록에서 고르기 | 서버 연결됨 | 목록은 앱 데이터(`data.ts`)이고, 고른 목적지는 `selected_poi_id`로 `/messages`에 보낸다 |
-| "길을 잃었어요" | 서버 연결됨 | 문장을 `/messages`로 보내고 위치 확인 화면으로 넘어간다 |
+| "길을 잃었어요" | 서버 연결됨 | 문장을 `/messages`로 보내고(서버는 확정 위치만 지우고 목적지·경로는 남긴다) 위치 확인 화면으로 넘어간다. 위치를 다시 확정하면 `GET /sessions/{id}/navigation-state`로 확인한 뒤 같은 목적지를 `reroute: true`로 다시 계산한다 |
 | 언어 전환 (세션 시작 후) | 서버 연결됨 | `PATCH /sessions/{id}`. `409 REVISION_CONFLICT`면 navigation-state로 맞춘 뒤 한 번 다시 보낸다. 세션 전에는 화면 언어만 바꾼다 |
 | 사진으로 위치 찾기 | 서버 연결됨 | JPEG 2MB 이하로 줄여 `POST /sessions/{id}/localizations`로 보낸다. 후보는 근거와 함께 보여 주고 저절로 확정하지 않는다. 후보가 없으면 서버의 `retake_hint`를, `503 AI_SERVICE_UNAVAILABLE`(지금 서버의 `NoVision`)이면 직접 선택 화면을 보여 준다. 데모 사진은 mock 모드에서만 보인다 |
 | 위치 확정 | 서버 연결됨 | 사용자가 누른 후보(`photo_candidate`)나 목록 항목(`manual`)만 `POST /sessions/{id}/location-confirmations`로 보낸다. `409 REVISION_CONFLICT`면 navigation-state로 맞춘 뒤 한 번 다시 보낸다. 직접 선택 목록은 `GET /maps/{id}/graph`의 노드 전체다 |
-| 경로 안내 | 로컬 (연결 진행 중, 작업 4) | `route.ts`가 `data.ts`의 통로로 계산한다. `/routes`를 부르지 않는다 |
-| 안내 시작·도착 | 로컬 (연결 진행 중, 작업 4) | `/navigation-events`를 보내지 않는다 |
-| 처음으로 (초기화) | 로컬 | 보관한 세션 토큰만 지운다. 서버 세션은 2시간 동안 요청이 없으면 만료된다 |
+| 경로 안내 | 서버 연결됨 | 위치 확정 뒤(또는 "길안내 시작") `POST /sessions/{id}/routes`. 단계의 문구·거리·사진(`pano_id`)·화살표(`arrow_yaw_deg`)는 서버 값을 쓰고, 노드 이름과 사진 주소는 `GET /maps/{id}/graph`에서 찾는다. `409 REVISION_CONFLICT`면 navigation-state로 맞춘 뒤 한 번 다시 보낸다. 등록된 경로가 없으면(`ROUTE_NOT_FOUND`) 경로를 지어내지 않고 안내만 보여 준다 |
+| 안내 시작·도착·취소 | 서버 연결됨 | `POST /sessions/{id}/navigation-events`. 경로를 받으면 `navigation_started`, 마지막 단계를 넘기면 `arrived`, 안내 중 처음으로 가면 `navigation_cancelled`를 보낸다. 실패해도 안내는 막지 않고, 같은 `Idempotency-Key`로 한 번 다시 보낸 뒤 남은 이벤트는 다음 이벤트와 함께 보낸다 |
+| 처음으로 (초기화) | 로컬 | 안내 중이면 `navigation_cancelled`를 보낸 뒤 보관한 세션 토큰을 지운다. 서버 세션은 2시간 동안 요청이 없으면 만료된다 |
 
-http 모드에서 경로 단계는 아직 서버에 알리지 않으므로 길안내 중에는 서버 세션 상태(데모 패널의 state·rev)가 바뀌지 않는다. 위치를 확정한 뒤의 경로는 서버가 확정한 노드에서 시작하는 데모 경로다(`src/features/session/nodeBridge.ts`, 작업 4에서 지운다).
-`src/features/route`에는 경로·이벤트용 요청 함수가 있지만 아직 화면에서 쓰지 않는다.
+'다음' 버튼은 화면의 단계만 넘기고 서버를 부르지 않는다. 서버 세션 상태(데모 패널의 state·rev)는 경로와 안내 이벤트 응답으로 바뀐다.
+목적지 목록은 아직 앱 데이터(`data.ts`)라서, 고른 목적지를 `src/features/session/poiBridge.ts`로 서버 POI id로 바꿔 보낸다.
 
 | 환경변수 | 기본값 | 쓰는 곳 |
 | --- | --- | --- |
