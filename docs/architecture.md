@@ -71,3 +71,4 @@ Purpose: app의 현재(As-Is)와 목표(To-Be) 아키텍처, 기술 스택, 변�
 | 검증 | `pnpm verify` | 헤더 검사 + lint + 타입체크 + vitest |
 | 헤더 검사 | `scripts/check-header.mjs` | 새 파일의 Date / Author / Purpose 확인 |
 | CI | `.github/workflows/ci.yml` | push·PR마다 `pnpm verify`, e2e는 독립 job (`test:e2e` 스크립트가 생기면 실행) |
+| CD 초안 | `.github/workflows/deploy.yml` | 지금은 수동 실행만. main을 빌드해 macserver로 rsync. 활성화 절차는 `docs/ci-cd.md` |
