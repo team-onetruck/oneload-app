@@ -10,7 +10,7 @@ Purpose: app의 현재(As-Is)와 목표(To-Be) 아키텍처, 기술 스택, 변�
 
 | 영역 | 스택 | 비고 |
 | --- | --- | --- |
-| app | React 19, TypeScript, Vite, pnpm, oxlint | 라우터, 서버 상태 라이브러리, CI 없음. 상태는 `store.tsx` 하나에 몰려 있음 |
+| app | React 19, TypeScript, Vite, pnpm, oxlint | 라우터, 서버 상태 라이브러리 없음. 상태는 `store.tsx` 하나에 몰려 있음 |
 | app 부가 | photo-sphere-viewer(360° 사진), lucide, Pretendard | |
 | backend | FastAPI, SQLAlchemy + Alembic, Postgres 17 + pgvector, networkx, uv | 요청 ID, JSON 로그, `Idempotency-Key`, `revision` 낙관적 락 |
 | agent (로컬 폴더 `infra/`) | Python, OpenAI LLM, FakeLLM 테스트, eval 17문항 | `LLMAgent`, `LLMVision`이 백엔드 규격에 맞게 구현됐지만 아직 연결 안 됨 |
@@ -70,3 +70,4 @@ Purpose: app의 현재(As-Is)와 목표(To-Be) 아키텍처, 기술 스택, 변�
 | 훅 | `.claude/settings.json` | 편집 후 lint + 타입체크, 종료 전 `pnpm verify` |
 | 검증 | `pnpm verify` | 헤더 검사 + lint + 타입체크 + vitest |
 | 헤더 검사 | `scripts/check-header.mjs` | 새 파일의 Date / Author / Purpose 확인 |
+| CI | `.github/workflows/ci.yml` | push·PR마다 `pnpm verify`, e2e는 독립 job (`test:e2e` 스크립트가 생기면 실행) |

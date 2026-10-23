@@ -70,4 +70,4 @@ Purpose: Claude Code가 이 레포에서 따를 프로젝트 규칙, 검증 명�
 - [ ] 4. 경로 + 이벤트 연동 (서버 `steps`로 안내, 도착 이벤트 전송)
 - [ ] 5. 오류 복구 (409 재동기화, 타임아웃 재시도)
 - [ ] 6. MSW 테스트 하네스와 Playwright 시나리오 3개
-- [ ] 7. GitHub Actions에서 `pnpm verify` 실행
+- [x] 7. GitHub Actions에서 `pnpm verify` 실행
