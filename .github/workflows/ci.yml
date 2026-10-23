@@ -97,5 +97,20 @@ jobs:
       - if: steps.e2e-script.outputs.present == 'true'
         run: pnpm install --frozen-lockfile
 
+      # 러너에는 Playwright 브라우저와 그 시스템 라이브러리가 없다. @playwright/test 버전에 맞는 chromium만 받는다.
+      - name: Playwright chromium 설치
+        if: steps.e2e-script.outputs.present == 'true'
+        run: pnpm exec playwright install --with-deps chromium
+
       - if: steps.e2e-script.outputs.present == 'true'
         run: pnpm test:e2e
+
+      # 실패한 테스트의 트레이스(playwright.config.ts의 trace: 'retain-on-failure')를 내려받아 볼 수 있게 올린다.
+      - name: 실패 트레이스 올리기
+        if: failure() && steps.e2e-script.outputs.present == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-test-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
