@@ -15,21 +15,27 @@ export function setApiAdapter(next: ApiAdapter) {
 }
 
 // 호출할 때마다 현재 어댑터를 읽어서, 어댑터를 바꾼 뒤에도 같은 함수를 그대로 쓸 수 있다.
-export const getHealth: ApiAdapter['getHealth'] = () => adapter.getHealth()
-export const getMaps: ApiAdapter['getMaps'] = () => adapter.getMaps()
-export const getMapGraph: ApiAdapter['getMapGraph'] = (mapId) => adapter.getMapGraph(mapId)
-export const searchPois: ApiAdapter['searchPois'] = (mapId, query) => adapter.searchPois(mapId, query)
-export const createSession: ApiAdapter['createSession'] = (body) => adapter.createSession(body)
-export const patchSession: ApiAdapter['patchSession'] = (sessionId, body) => adapter.patchSession(sessionId, body)
-export const getNavigationState: ApiAdapter['getNavigationState'] = (sessionId) => adapter.getNavigationState(sessionId)
-export const sendMessage: ApiAdapter['sendMessage'] = (sessionId, body) => adapter.sendMessage(sessionId, body)
-export const postLocalization: ApiAdapter['postLocalization'] = (sessionId, body) =>
-  adapter.postLocalization(sessionId, body)
-export const confirmLocation: ApiAdapter['confirmLocation'] = (sessionId, body) => adapter.confirmLocation(sessionId, body)
-export const createRoute: ApiAdapter['createRoute'] = (sessionId, body) => adapter.createRoute(sessionId, body)
-export const postNavigationEvents: ApiAdapter['postNavigationEvents'] = (sessionId, body) =>
-  adapter.postNavigationEvents(sessionId, body)
-export const postFeedback: ApiAdapter['postFeedback'] = (sessionId, body) => adapter.postFeedback(sessionId, body)
+export const getHealth: ApiAdapter['getHealth'] = (options) => adapter.getHealth(options)
+export const getMaps: ApiAdapter['getMaps'] = (options) => adapter.getMaps(options)
+export const getMapGraph: ApiAdapter['getMapGraph'] = (mapId, options) => adapter.getMapGraph(mapId, options)
+export const searchPois: ApiAdapter['searchPois'] = (mapId, query, options) => adapter.searchPois(mapId, query, options)
+export const createSession: ApiAdapter['createSession'] = (body, options) => adapter.createSession(body, options)
+export const patchSession: ApiAdapter['patchSession'] = (sessionId, body, options) =>
+  adapter.patchSession(sessionId, body, options)
+export const getNavigationState: ApiAdapter['getNavigationState'] = (sessionId, options) =>
+  adapter.getNavigationState(sessionId, options)
+export const sendMessage: ApiAdapter['sendMessage'] = (sessionId, body, options) =>
+  adapter.sendMessage(sessionId, body, options)
+export const postLocalization: ApiAdapter['postLocalization'] = (sessionId, body, options) =>
+  adapter.postLocalization(sessionId, body, options)
+export const confirmLocation: ApiAdapter['confirmLocation'] = (sessionId, body, options) =>
+  adapter.confirmLocation(sessionId, body, options)
+export const createRoute: ApiAdapter['createRoute'] = (sessionId, body, options) =>
+  adapter.createRoute(sessionId, body, options)
+export const postNavigationEvents: ApiAdapter['postNavigationEvents'] = (sessionId, body, options) =>
+  adapter.postNavigationEvents(sessionId, body, options)
+export const postFeedback: ApiAdapter['postFeedback'] = (sessionId, body, options) =>
+  adapter.postFeedback(sessionId, body, options)
 export const getSavedSessionId: ApiAdapter['getSavedSessionId'] = () => adapter.getSavedSessionId()
 export const clearSession: ApiAdapter['clearSession'] = () => adapter.clearSession()
 

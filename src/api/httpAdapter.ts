@@ -33,53 +33,59 @@ function toFormData(fields: Record<string, string | Blob | null | undefined>): F
 
 export function createHttpAdapter(client: ApiClient): ApiAdapter {
   return {
-    getHealth: () => client.request<HealthOut>('/health'),
-    getMaps: () => client.request<MapsOut>('/maps'),
-    getMapGraph: (mapId) => client.request<GraphOut>(`${mapPath(mapId)}/graph`),
-    searchPois: (mapId, query) => client.request<PoisOut>(`${mapPath(mapId)}/pois`, { query: { query } }),
+    getHealth: (options) => client.request<HealthOut>('/health', options),
+    getMaps: (options) => client.request<MapsOut>('/maps', options),
+    getMapGraph: (mapId, options) => client.request<GraphOut>(`${mapPath(mapId)}/graph`, options),
+    searchPois: (mapId, query, options) =>
+      client.request<PoisOut>(`${mapPath(mapId)}/pois`, { ...options, query: { query } }),
 
-    async createSession(body) {
-      const out = await client.request<CreateSessionOut>('/sessions', { method: 'POST', json: body })
+    async createSession(body, options) {
+      const out = await client.request<CreateSessionOut>('/sessions', { ...options, method: 'POST', json: body })
       client.setSession({ sessionId: out.session_id, token: out.session_token })
       return out
     },
 
-    patchSession: (sessionId, body) =>
-      client.request<PatchSessionOut>(sessionPath(sessionId), { method: 'PATCH', json: body }),
+    patchSession: (sessionId, body, options) =>
+      client.request<PatchSessionOut>(sessionPath(sessionId), { ...options, method: 'PATCH', json: body }),
 
-    getNavigationState: (sessionId) =>
-      client.request<NavigationStateOut>(`${sessionPath(sessionId)}/navigation-state`),
+    getNavigationState: (sessionId, options) =>
+      client.request<NavigationStateOut>(`${sessionPath(sessionId)}/navigation-state`, options),
 
     // 텍스트는 JSON, 사진이 있으면 multipart로 보낸다.
-    sendMessage: (sessionId, { image, ...message }) =>
+    sendMessage: (sessionId, { image, ...message }, options) =>
       client.request<MessageOut>(
         `${sessionPath(sessionId)}/messages`,
-        image ? { method: 'POST', form: toFormData({ ...message, image }) } : { method: 'POST', json: message },
+        image
+          ? { ...options, method: 'POST', form: toFormData({ ...message, image }) }
+          : { ...options, method: 'POST', json: message },
       ),
 
-    postLocalization: (sessionId, body) =>
+    postLocalization: (sessionId, body, options) =>
       client.request<LocalizationOut>(`${sessionPath(sessionId)}/localizations`, {
+        ...options,
         method: 'POST',
         form: toFormData(body),
       }),
 
-    confirmLocation: (sessionId, body) =>
+    confirmLocation: (sessionId, body, options) =>
       client.request<ConfirmationOut>(`${sessionPath(sessionId)}/location-confirmations`, {
+        ...options,
         method: 'POST',
         json: body,
       }),
 
-    createRoute: (sessionId, body) =>
-      client.request<RouteOut>(`${sessionPath(sessionId)}/routes`, { method: 'POST', json: body }),
+    createRoute: (sessionId, body, options) =>
+      client.request<RouteOut>(`${sessionPath(sessionId)}/routes`, { ...options, method: 'POST', json: body }),
 
-    postNavigationEvents: (sessionId, body) =>
+    postNavigationEvents: (sessionId, body, options) =>
       client.request<NavigationEventsOut>(`${sessionPath(sessionId)}/navigation-events`, {
+        ...options,
         method: 'POST',
         json: body,
       }),
 
-    postFeedback: (sessionId, body) =>
-      client.request<FeedbackOut>(`${sessionPath(sessionId)}/feedback`, { method: 'POST', json: body }),
+    postFeedback: (sessionId, body, options) =>
+      client.request<FeedbackOut>(`${sessionPath(sessionId)}/feedback`, { ...options, method: 'POST', json: body }),
 
     getSavedSessionId: () => client.getSession()?.sessionId ?? null,
     clearSession: () => client.clearSession(),
