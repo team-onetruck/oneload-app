@@ -64,7 +64,7 @@ Purpose: Claude Code가 이 레포에서 따를 프로젝트 규칙, 검증 명�
 ### 작업 목록 (한 항목 = 한 PR, 끝나면 체크)
 
 - [x] 0. 하네스 세팅 (vitest, verify, 훅, CLAUDE.md)
-- [ ] 1. `src/api/` 클라이언트와 타입 생성 (토큰, `expected_revision`, `Idempotency-Key`)
+- [x] 1. `src/api/` 클라이언트와 타입 생성 (토큰, `expected_revision`, `Idempotency-Key`)
 - [ ] 2. 세션 생성 + 메시지 연동 (채팅에 서버 응답과 출처 표시)
 - [ ] 3. 사진 업로드 + 위치 확정 (503 폴백 포함)
 - [ ] 4. 경로 + 이벤트 연동 (서버 `steps`로 안내, 도착 이벤트 전송)
