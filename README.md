@@ -16,6 +16,16 @@ The route screen has a **Line / Street view** toggle. Street view shows a 360° 
 - The photos in `public/panos/` are **CC0 samples of other stations** from [Poly Haven](https://polyhaven.com) (Hamburg Hbf, a subway passage, Amsterdam Noord and Vijzelgracht), labelled "Example photo" on screen. Replace them with the Seoul Station field shoot; faces must be blurred before publishing.
 - Points without a photo show a "no photo yet" panel; ticket counters and machines have none yet.
 
+## Live view (camera + direction arrow)
+
+경로 화면의 **Line / Street view / Live** 탭 중 Live는 후면 카메라 영상 위에 다음 지점이 있는 방향을 화살표로 얹는다. 카메라는 "카메라 켜기"를 누른 뒤에만 켜지고, 영상은 폰 안에서만 쓰며 서버로 보내지 않는다. 다른 탭으로 가면 카메라가 꺼진다.
+
+- **위치는 실시간이 아니다.** 실내에는 GPS가 없어서 위치는 사용자가 확정한 지점(노드)뿐이다. 화면 위 칩은 "위치 확인됨"(경로 시작) 또는 "'다음'으로 옮긴 위치"를 보여 준다. 실시간인 것은 방향뿐이다.
+- 화살표 각도는 `통로의 지도 방위(Edge.heading_deg, GuideLeg.headingDeg) − 폰이 향한 방위`다. iOS는 `webkitCompassHeading`, Android는 `deviceorientationabsolute`를 방위로 바꾼다(`src/features/live/heading.ts`, `sensors.ts`).
+- 방향이 불안정하거나(흔들림·기기 정확도), 센서가 없거나, 권한을 거절했거나, 그 구간의 방위가 없으면 화살표를 숨기고 이유와 "아래 안내를 따르라"를 보여 준다. 카메라를 못 쓰면 노선 보기로 돌아가는 버튼을 준다.
+- 안정 판정 숫자와 방향 힌트 경계는 가정이다. 서울역 실측([docs/phase0-compass-field-test.md](docs/phase0-compass-field-test.md)) 전에는 화살표를 "방향 참고용"으로만 쓴다. `?demo`(mock 모드)에서는 화면에 폰 방위 → 목표 방위, 판정, 샘플 수, 흔들림이 보이는 확인용 줄이 있어 실기기 확인에 쓴다.
+- iOS Safari의 `webkitCompassHeading`이 폰을 세워 든 자세에서도 카메라 방향을 주는지는 실기기로 아직 확인하지 않았다.
+
 ## Run
 
 ```sh
