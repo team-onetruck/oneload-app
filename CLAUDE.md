@@ -14,7 +14,7 @@ Purpose: Claude Code가 이 레포에서 따를 프로젝트 규칙, 검증 명�
 - `pnpm dev`: 개발 서버 (http://localhost:5173)
 - `pnpm verify`: 헤더 검사 + lint + 타입체크 + 단위 테스트. 모든 작업은 이게 통과해야 끝난 것이다.
 - `pnpm test`: vitest 1회 실행
-- `pnpm e2e`: Playwright E2E 9개. 개발 서버를 mock(4179)·http(4180) 모드로 하나씩 띄우고, http 시나리오는 `page.route`로 `/api/v1`을 MSW 핸들러가 답한다. 느려서 verify에는 넣지 않는다. 처음 한 번 `pnpm exec playwright install chromium`
+- `pnpm e2e`: Playwright E2E 11개. 개발 서버를 mock(4179)·http(4180) 모드로 하나씩 띄우고, http 시나리오는 `page.route`로 `/api/v1`을 MSW 핸들러가 답한다. 느려서 verify에는 넣지 않는다. 처음 한 번 `pnpm exec playwright install chromium`
 - `pnpm build`: 타입체크 후 프로덕션 빌드
 
 ## 작성 규칙 (사용자 지정)

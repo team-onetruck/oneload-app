@@ -1053,7 +1053,7 @@ export function DemoPanel() {
               </>
             )}
             <button className="btn secondary block" onClick={app.reset}>
-              <RefreshCw size={18} /> {UI.reset[lang]}
+              <RefreshCw size={18} /> {MODE.reset[lang]}
             </button>
           </section>
         </div>
