@@ -3,7 +3,8 @@
  * Author: Jung Minkyu
  * Purpose: 길안내 시작·도착·취소 이벤트를 만들고 navigation-events로 보낸다. 재전송해도 같은 event_id를 쓴다
  */
-import type { ApiAdapter, NavigationEvent, NavigationEventsIn, NavigationEventsOut } from '../../api/types'
+import { isApiError } from '../../api/errors'
+import type { ApiAdapter, MutationOptions, NavigationEvent, NavigationEventsIn, NavigationEventsOut } from '../../api/types'
 
 export type NavigationEventType = NavigationEvent['type']
 
@@ -45,13 +46,24 @@ export interface SendEventsResult {
 }
 
 // 대기열 앞에서부터 최대 50개를 보낸다. 실패하면 예외를 그대로 던지므로, 호출한 쪽은 같은 대기열로 다시 부르면 된다.
+// 다시 보낼 때 처음 요청의 키(options.idempotencyKey)를 넘기면, 첫 요청이 이미 반영됐어도 서버가 저장된 응답을 돌려준다.
 export async function sendNavigationEvents(
   api: Pick<ApiAdapter, 'postNavigationEvents'>,
   sessionId: string,
   routeId: string | null,
   pending: NavigationEvent[],
+  options: MutationOptions = {},
 ): Promise<SendEventsResult> {
   const batch = pending.slice(0, MAX_EVENTS_PER_REQUEST)
-  const out = await api.postNavigationEvents(sessionId, buildNavigationEventsBody(routeId, batch))
+  const out = await api.postNavigationEvents(sessionId, buildNavigationEventsBody(routeId, batch), options)
   return { out, pending: pendingAfter(pending, out) }
+}
+
+// 도착·취소가 반영되면 서버는 활성 경로를 비운다. 같은 키를 쓰지 못한 재전송(새로고침 뒤 대기열, 처리 중 겹침)은
+// event_id 중복 검사보다 route_id 검사가 먼저라 422 INVALID_INPUT이 된다 (backend/app/api/sessions.py).
+// 그 경우만 이미 반영된 것으로 본다. 본문 검증 오류(details.errors)나 다른 경로가 활성인 경우는 아니다.
+export function isRouteAlreadyClosed(error: unknown, events: Pick<NavigationEvent, 'type'>[]): boolean {
+  if (!isApiError(error) || error.code !== 'INVALID_INPUT') return false
+  if (!('active_route_id' in error.details) || error.details.active_route_id !== null) return false
+  return events.some((e) => e.type === 'arrived' || e.type === 'navigation_cancelled')
 }
