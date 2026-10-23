@@ -68,7 +68,7 @@ Purpose: Claude Code가 이 레포에서 따를 프로젝트 규칙, 검증 명�
 - [x] 1. `src/api/` 클라이언트와 타입 생성 (토큰, `expected_revision`, `Idempotency-Key`)
 - [x] 2. 세션 생성 + 메시지 연동 (채팅에 서버 응답과 출처 표시)
 - [x] 3. 사진 업로드 + 위치 확정 (503 폴백 포함)
-- [ ] 4. 경로 + 이벤트 연동 (서버 `steps`로 안내, 도착 이벤트 전송)
+- [x] 4. 경로 + 이벤트 연동 (서버 `steps`로 안내, 도착 이벤트 전송)
 - [x] 5. 오류 복구 (409 재동기화, 타임아웃 재시도)
 - [ ] 6. MSW 테스트 하네스와 Playwright 시나리오 3개
 - [x] 7. GitHub Actions에서 `pnpm verify` 실행
