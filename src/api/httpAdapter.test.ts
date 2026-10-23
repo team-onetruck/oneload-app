@@ -3,10 +3,12 @@
  * Author: Jung Minkyu
  * Purpose: http 어댑터가 엔드포인트 경로, 본문 형식(JSON/multipart), 세션 토큰 보관을 백엔드 계약대로 쓰는지 검증하는 단위 테스트
  */
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApiClient } from './client'
 import type { FetchLike } from './client'
+import type { ApiError } from './errors'
 import { createHttpAdapter } from './httpAdapter'
+import type { ApiAdapter, CallOptions, MutationOptions } from './types'
 
 interface Call {
   url: string
@@ -127,5 +129,129 @@ describe('createHttpAdapter', () => {
       'GET /maps/seoul-station/graph',
       'GET /maps/seoul-station/pois?query=express',
     ])
+  })
+})
+
+const photo = () => new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: 'image/jpeg' })
+
+// 변경 요청 함수를 한 번씩 부른다. 4번째(사진 있는 sendMessage)와 5번째(postLocalization)는 multipart로 나간다.
+const MUTATION_COUNT = 9
+async function callEveryMutation(api: ApiAdapter, options?: MutationOptions) {
+  await api.createSession({ language: 'ko', map_id: 'seoul-station', client: { platform: 'web', app_version: 'test', ar_capable: false } }, options)
+  await api.patchSession('ses_1', { expected_revision: 1, language: 'en' }, options)
+  await api.sendMessage('ses_1', { message: '안녕', language: null }, options)
+  await api.sendMessage('ses_1', { message: '안녕', language: null, image: photo() }, options)
+  await api.postLocalization('ses_1', { image: photo(), map_version: 'v1' }, options)
+  await api.confirmLocation('ses_1', { expected_revision: 2, method: 'manual', selected_node_id: 'line4-gates' }, options)
+  await api.createRoute(
+    'ses_1',
+    { expected_revision: 3, destination_poi_id: 'poi-express-tickets', map_version: 'v1', start: { type: 'confirmed_node' }, reroute: false },
+    options,
+  )
+  await api.postNavigationEvents(
+    'ses_1',
+    { events: [{ event_id: 'ev-1', type: 'arrived', client_timestamp: '2026-10-23T00:00:00Z', context: {} }] },
+    options,
+  )
+  await api.postFeedback('ses_1', { rating: 5, category: 'other', comment: '', allow_image_retention: false }, options)
+}
+
+// 조회 함수를 한 번씩 부른다. 4번째는 검색어가 있는 searchPois다.
+async function callEveryRead(api: ApiAdapter, options?: CallOptions) {
+  await api.getHealth(options)
+  await api.getMaps(options)
+  await api.getMapGraph('seoul-station', options)
+  await api.searchPois('seoul-station', 'express', options)
+  await api.getNavigationState('ses_1', options)
+}
+
+describe('Idempotency-Key 부여', () => {
+  // 서버는 POST에 키가 없으면 인증보다 먼저 400 BAD_REQUEST를 낸다 (backend/app/middleware.py).
+  it('옵션을 넘기지 않거나 timeoutMs만 넘겨도 모든 변경 요청에 새 키가 붙고, 조회에는 붙지 않는다', async () => {
+    const { fetch, calls } = fakeFetch(created)
+    const api = createHttpAdapter(createApiClient({ baseUrl: BASE, fetch, storage: null }))
+
+    await callEveryMutation(api)
+    await callEveryMutation(api, { timeoutMs: 5_000 })
+    await callEveryRead(api)
+
+    const writes = calls.slice(0, MUTATION_COUNT * 2)
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    for (const call of writes) expect(call.headers.get('Idempotency-Key'), `${call.init.method} ${call.url}`).toMatch(uuid)
+    expect(new Set(writes.map((c) => c.headers.get('Idempotency-Key'))).size).toBe(writes.length)
+    expect(writes.map((c) => c.url.replace(BASE, '')).slice(0, MUTATION_COUNT)).toEqual([
+      '/sessions',
+      '/sessions/ses_1',
+      '/sessions/ses_1/messages',
+      '/sessions/ses_1/messages',
+      '/sessions/ses_1/localizations',
+      '/sessions/ses_1/location-confirmations',
+      '/sessions/ses_1/routes',
+      '/sessions/ses_1/navigation-events',
+      '/sessions/ses_1/feedback',
+    ])
+    // multipart 업로드도 키를 붙인다.
+    expect(writes[3].init.body).toBeInstanceOf(FormData)
+    expect(writes[4].init.body).toBeInstanceOf(FormData)
+
+    for (const call of calls.slice(MUTATION_COUNT * 2)) expect(call.headers.has('Idempotency-Key'), call.url).toBe(false)
+  })
+})
+
+describe('재시도 옵션', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('sendMessage가 타임아웃 나면 오류에 남은 키로 다시 보내 같은 Idempotency-Key가 간다', async () => {
+    vi.useFakeTimers()
+    const calls: Call[] = []
+    // 첫 요청은 응답 없이 기다리고, 두 번째 요청에는 바로 답한다.
+    const fetch: FetchLike = (url, init) => {
+      calls.push({ url, init, headers: new Headers(init.headers) })
+      if (calls.length === 1) {
+        return new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+        })
+      }
+      return Promise.resolve(new Response(JSON.stringify({ status: 'answered' }), { status: 200 }))
+    }
+    const api = createHttpAdapter(createApiClient({ baseUrl: BASE, fetch, storage: null }))
+    const message = { message: '돈은 어떻게 내요?', language: null }
+
+    // 기본 15초가 아니라 넘긴 5초에 끊긴다.
+    const pending = api.sendMessage('ses_1', message, { timeoutMs: 5_000 }).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5_000)
+    const error = await pending
+    expect(error).toMatchObject({ code: 'TIMEOUT', retryable: true })
+    const { idempotencyKey } = error as ApiError
+    expect(idempotencyKey).toBe(calls[0].headers.get('Idempotency-Key'))
+
+    await expect(api.sendMessage('ses_1', message, { idempotencyKey: idempotencyKey ?? undefined })).resolves.toEqual({
+      status: 'answered',
+    })
+    expect(calls[1].headers.get('Idempotency-Key')).toBe(idempotencyKey)
+    expect(calls[1].init.body).toBe(calls[0].init.body)
+  })
+
+  it('변경 요청은 idempotencyKey와 timeoutMs를, 조회는 timeoutMs를 client.request로 넘긴다', async () => {
+    const { fetch } = fakeFetch()
+    const client = createApiClient({ baseUrl: BASE, fetch, storage: null })
+    const request = vi.spyOn(client, 'request')
+    const api = createHttpAdapter(client)
+    const write = { idempotencyKey: 'key-1', timeoutMs: 40_000 }
+    const read = { timeoutMs: 1_000 }
+
+    await callEveryMutation(api, write)
+    await callEveryRead(api, read)
+
+    const sent = request.mock.calls.map(([, options]) => options)
+    expect(sent).toHaveLength(MUTATION_COUNT + 5)
+    for (const options of sent.slice(0, MUTATION_COUNT)) expect(options).toMatchObject(write)
+    for (const options of sent.slice(MUTATION_COUNT)) expect(options).toMatchObject(read)
+    // 옵션이 메서드와 검색어를 덮어쓰지 않는다.
+    expect(sent[0]).toMatchObject({ method: 'POST' })
+    expect(sent[1]).toMatchObject({ method: 'PATCH' })
+    expect(sent[MUTATION_COUNT + 3]).toMatchObject({ query: { query: 'express' } })
   })
 })

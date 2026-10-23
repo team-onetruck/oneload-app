@@ -75,15 +75,17 @@ function readStoredSession(storage: TokenStorage | null): SessionCredentials | n
   return null
 }
 
-async function errorFromResponse(res: Response): Promise<ApiError> {
+async function errorFromResponse(res: Response, idempotencyKey: string | undefined): Promise<ApiError> {
   // request_id는 본문과 X-Request-ID 헤더 양쪽에 온다 (backend/app/middleware.py).
   const headerRequestId = res.headers.get('X-Request-ID')
   const body: unknown = await res.json().catch(() => null)
   if (isErrorBody(body)) {
     const { code, message, retryable, details } = body.error
-    return new ApiError(res.status, code, message, body.request_id ?? headerRequestId, { retryable, details })
+    return new ApiError(res.status, code, message, body.request_id ?? headerRequestId, { retryable, details, idempotencyKey })
   }
-  return new ApiError(res.status, 'UNEXPECTED_RESPONSE', `공통 오류 형식이 아닌 HTTP ${res.status} 응답`, headerRequestId)
+  return new ApiError(res.status, 'UNEXPECTED_RESPONSE', `공통 오류 형식이 아닌 HTTP ${res.status} 응답`, headerRequestId, {
+    idempotencyKey,
+  })
 }
 
 export function createApiClient(options: ClientOptions = {}): ApiClient {
@@ -126,7 +128,9 @@ export function createApiClient(options: ClientOptions = {}): ApiClient {
     const headers = new Headers()
     if (session) headers.set('Authorization', `Bearer ${session.token}`)
     // 서버가 키를 요구하는 것은 POST뿐이고(backend/app/middleware.py) PATCH에서는 무시되지만, 변경 요청에는 모두 붙인다.
-    if (method !== 'GET') headers.set('Idempotency-Key', req.idempotencyKey ?? newIdempotencyKey())
+    // 자동으로 만든 키도 오류에 담아, 호출자가 재시도할 때 같은 키를 넘길 수 있게 한다.
+    const idempotencyKey = method === 'GET' ? undefined : (req.idempotencyKey ?? newIdempotencyKey())
+    if (idempotencyKey !== undefined) headers.set('Idempotency-Key', idempotencyKey)
     let body: BodyInit | undefined
     if (req.form) {
       // multipart 경계값은 fetch가 Content-Type에 넣는다.
@@ -147,14 +151,18 @@ export function createApiClient(options: ClientOptions = {}): ApiClient {
     try {
       const res = await doFetch(url, { method, headers, body, signal: controller.signal })
       status = res.status
-      if (!res.ok) throw await errorFromResponse(res)
+      if (!res.ok) throw await errorFromResponse(res, idempotencyKey)
       return (await res.json()) as T
     } catch (error) {
       if (error instanceof ApiError) throw error
       // 같은 Idempotency-Key로 다시 보내면 중복 생성 없이 저장된 응답을 받으므로 재시도해도 된다.
-      if (timedOut) throw new ApiError(0, 'TIMEOUT', `${timeoutMs}ms 안에 응답이 없습니다.`, null, { retryable: true })
-      if (error instanceof SyntaxError) throw new ApiError(status, 'UNEXPECTED_RESPONSE', '응답 본문이 JSON이 아닙니다.')
-      throw new ApiError(0, 'NETWORK', '서버에 연결하지 못했습니다.', null, { retryable: true })
+      if (timedOut) {
+        throw new ApiError(0, 'TIMEOUT', `${timeoutMs}ms 안에 응답이 없습니다.`, null, { retryable: true, idempotencyKey })
+      }
+      if (error instanceof SyntaxError) {
+        throw new ApiError(status, 'UNEXPECTED_RESPONSE', '응답 본문이 JSON이 아닙니다.', null, { idempotencyKey })
+      }
+      throw new ApiError(0, 'NETWORK', '서버에 연결하지 못했습니다.', null, { retryable: true, idempotencyKey })
     } finally {
       clearTimeout(timer)
     }

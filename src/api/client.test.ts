@@ -27,6 +27,12 @@ function fakeFetch(...responses: Array<Response | Error>) {
   return { fetch, calls }
 }
 
+// 응답 없이 기다리다가 abort되면 끊기는 fetch
+const hangingFetch: FetchLike = (_url, init) =>
+  new Promise((_resolve, reject) => {
+    init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+  })
+
 const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } })
 
@@ -113,6 +119,36 @@ describe('Idempotency-Key', () => {
     })
     expect(calls[0].headers.get('Idempotency-Key')).toBe('retry-key-1')
   })
+
+  it('자동으로 만든 키를 오류에 남겨, 재시도 때 같은 키와 같은 본문을 보낼 수 있다', async () => {
+    const { fetch, calls } = fakeFetch(new TypeError('fetch failed'), json(200, { ok: true }))
+    const client = createApiClient({ baseUrl: BASE, fetch, storage: null })
+    const message = { message: '돈은 어떻게 내요?' }
+
+    const error = await client.request('/sessions/ses_1/messages', { method: 'POST', json: message }).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ApiError)
+    const { idempotencyKey } = error as ApiError
+    expect(idempotencyKey).toBe(calls[0].headers.get('Idempotency-Key'))
+    expect(error).toMatchObject({ code: 'NETWORK', retryable: true })
+
+    await client.request('/sessions/ses_1/messages', { method: 'POST', json: message, idempotencyKey: idempotencyKey ?? undefined })
+    expect(calls[1].headers.get('Idempotency-Key')).toBe(idempotencyKey)
+    expect(calls[1].init.body).toBe(calls[0].init.body)
+  })
+
+  it('서버 오류에도 보낸 키를 남기고, 키를 보내지 않은 GET 오류는 null이다', async () => {
+    const { fetch, calls } = fakeFetch(serverError(503, 'AI_SERVICE_UNAVAILABLE'), serverError(404, 'MAP_NOT_FOUND'))
+    const client = createApiClient({ baseUrl: BASE, fetch, storage: null, newIdempotencyKey: () => 'auto-key-1' })
+
+    const postError = await client
+      .request('/sessions/ses_1/localizations', { method: 'POST', form: new FormData() })
+      .catch((e: unknown) => e)
+    const getError = await client.request('/maps/unknown/graph').catch((e: unknown) => e)
+
+    expect(postError).toMatchObject({ code: 'AI_SERVICE_UNAVAILABLE', idempotencyKey: 'auto-key-1' })
+    expect(getError).toMatchObject({ code: 'MAP_NOT_FOUND', idempotencyKey: null })
+    expect(calls[1].headers.has('Idempotency-Key')).toBe(false)
+  })
 })
 
 describe('오류 변환', () => {
@@ -188,6 +224,45 @@ describe('오류 변환', () => {
     await vi.advanceTimersByTimeAsync(1)
     expect(await pending).toMatchObject({ status: 0, code: 'TIMEOUT', retryable: true })
     expect(signal?.aborted).toBe(true)
+  })
+
+  it('호출별 timeoutMs가 클라이언트 기본값보다 먼저 쓰이고, 타임아웃 오류에도 키가 남는다', async () => {
+    vi.useFakeTimers()
+    const client = createApiClient({ baseUrl: BASE, fetch: hangingFetch, storage: null, timeoutMs: 30_000 })
+
+    let settled = false
+    const pending = client
+      .request('/sessions/ses_1/localizations', { method: 'POST', form: new FormData(), timeoutMs: 3_000, idempotencyKey: 'photo-1' })
+      .catch((e: unknown) => e)
+      .finally(() => {
+        settled = true
+      })
+
+    await vi.advanceTimersByTimeAsync(2_999)
+    expect(settled).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(await pending).toMatchObject({
+      code: 'TIMEOUT',
+      message: '3000ms 안에 응답이 없습니다.',
+      retryable: true,
+      idempotencyKey: 'photo-1',
+    })
+  })
+
+  it('클라이언트 timeoutMs는 기본 15초를 바꾼다', async () => {
+    vi.useFakeTimers()
+    let settled = false
+    const pending = createApiClient({ baseUrl: BASE, fetch: hangingFetch, storage: null, timeoutMs: 30_000 })
+      .request('/maps/seoul-station/graph')
+      .catch((e: unknown) => e)
+      .finally(() => {
+        settled = true
+      })
+
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(settled).toBe(false)
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(await pending).toMatchObject({ code: 'TIMEOUT', idempotencyKey: null })
   })
 
   it('응답이 제때 오면 타임아웃 타이머를 남기지 않는다', async () => {
