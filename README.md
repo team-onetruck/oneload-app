@@ -64,6 +64,16 @@ VITE_API_PROXY_TARGET=https://baki-macbookpro.tail3286a4.ts.net:10000 pnpm dev  
 VITE_API_MODE=mock pnpm dev                                               # 서버 없이
 ```
 
+### 테스트
+
+```sh
+pnpm verify   # 헤더 검사 + oxlint + 타입체크 + vitest. 커밋 전에 반드시 통과시킨다
+pnpm e2e      # Playwright(pnpm test:e2e). 개발 서버를 VITE_API_MODE=mock으로 띄운다. 처음 한 번 pnpm exec playwright install chromium
+```
+
+두 명령 모두 서버 없이 돈다. vitest는 가짜 fetch와 MSW 핸들러로 백엔드 계약을 흉내 내고, Playwright 스모크는 mock 모드에서 시작 화면이 뜨는지만 본다.
+그래서 실서버에서 채팅 → 사진 → 경로 전체 흐름이 동작한다는 증거는 아니다. 자세한 범위는 [docs/ci-cd.md의 검증 범위](docs/ci-cd.md#검증-범위-무엇을-증명하고-무엇을-증명하지-않는가)를 본다.
+
 ## Deploy (macserver)
 
 `dist/` is synced to `macserver:~/hangil-demo/dist`. Caddy on `127.0.0.1:4173` serves it (zstd/gzip, immutable cache for `/assets`), proxies `/api/*` to the backend and serves `/panos/*` from [oneload-data](https://github.com/team-onetruck/oneload-data); Tailscale Funnel exposes all of it at `https://baki-macbookpro.tail3286a4.ts.net:10000/`. The server setup lives in [oneload-infra](https://github.com/team-onetruck/oneload-infra).
