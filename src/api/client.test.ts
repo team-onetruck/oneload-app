@@ -256,6 +256,21 @@ describe('오류 변환', () => {
     expect(signal?.aborted).toBe(true)
   })
 
+  it('자기 타이머로 끊은 요청은 fetch가 AbortError가 아닌 TypeError로 실패해도 TIMEOUT으로 바꾼다', async () => {
+    vi.useFakeTimers()
+    // undici는 경우에 따라 abort 뒤에도 TypeError('fetch failed')로 끊는다. 분류는 오류 종류가 아니라 타임아웃 여부로 한다
+    const failsAsTypeError: FetchLike = (_url, init) =>
+      new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => reject(new TypeError('fetch failed')))
+      })
+    const pending = createApiClient({ baseUrl: BASE, fetch: failsAsTypeError, storage: null, timeoutMs: 1_000 })
+      .request('/sessions/ses_1/navigation-events', { method: 'POST', json: {}, idempotencyKey: 'evt-1' })
+      .catch((e: unknown) => e)
+
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(await pending).toMatchObject({ status: 0, code: 'TIMEOUT', retryable: true, idempotencyKey: 'evt-1' })
+  })
+
   it('호출별 timeoutMs가 클라이언트 기본값보다 먼저 쓰이고, 타임아웃 오류에도 키가 남는다', async () => {
     vi.useFakeTimers()
     const client = createApiClient({ baseUrl: BASE, fetch: hangingFetch, storage: null, timeoutMs: 30_000 })

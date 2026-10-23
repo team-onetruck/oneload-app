@@ -6,6 +6,7 @@
 import { HttpResponse, http } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 import { createApiClient } from '../../api/client'
+import { unansweredFirst } from '../../api/fakeFetch'
 import { createHttpAdapter } from '../../api/httpAdapter'
 import type { NavigationStateOut, RouteOut } from '../../api'
 import { GRAPH, MAP_ID, MAP_VERSION } from '../../test/fixtures/seoulStation'
@@ -22,9 +23,11 @@ import { arrowYawDeg, toSteps } from './toSteps'
 const BASE = 'http://api.test/api/v1'
 const EXPRESS_TICKETS = 'poi-express-tickets'
 
-// 실제 http 어댑터를 MSW에 붙이고, 경로·이벤트 요청의 Idempotency-Key를 기록한다. 목적지는 /messages로 정한다
-async function start({ timeoutMs }: { timeoutMs?: number } = {}) {
+// 실제 http 어댑터를 MSW에 붙이고, 경로·이벤트 요청의 Idempotency-Key를 기록한다. 목적지는 /messages로 정한다.
+// unansweredEvents: navigation-events 요청 중 처음 n번은 서버에 닿지 않고 응답도 오지 않는다 (fakeFetch의 unansweredFirst)
+async function start({ timeoutMs, unansweredEvents = 0 }: { timeoutMs?: number; unansweredEvents?: number } = {}) {
   const keys = { routes: [] as string[], events: [] as string[] }
+  const next = unansweredFirst('/navigation-events', unansweredEvents)
   const client = createApiClient({
     baseUrl: BASE,
     storage: null,
@@ -33,7 +36,7 @@ async function start({ timeoutMs }: { timeoutMs?: number } = {}) {
       const key = new Headers(init.headers).get('Idempotency-Key') ?? ''
       if (url.endsWith('/routes')) keys.routes.push(key)
       if (url.endsWith('/navigation-events')) keys.events.push(key)
-      return globalThis.fetch(url, init)
+      return next(url, init)
     },
   })
   const api = createHttpAdapter(client)
@@ -154,7 +157,7 @@ describe('sendRoute', () => {
 })
 
 // 경로를 만들어 둔 세션. 이벤트 테스트가 함께 쓴다
-async function routed(options: { timeoutMs?: number } = {}) {
+async function routed(options: { timeoutMs?: number; unansweredEvents?: number } = {}) {
   const s = await start(options)
   const confirmed = await s.confirmAt('line4-gates')
   const r = hooks()
@@ -174,23 +177,24 @@ describe('deliverEvents', () => {
   })
 
   it('응답이 없으면 처음 요청과 같은 Idempotency-Key로 한 번만 조용히 다시 보낸다', async () => {
-    const { api, sessionId, route, keys } = await routed({ timeoutMs: 50 })
-    mockBackend.hang('navigationEvents', 1)
+    const { api, sessionId, route, keys } = await routed({ timeoutMs: 200, unansweredEvents: 1 })
     const outcome = await deliverEvents({ api, sessionId, routeId: route.route_id, pending: [createNavigationEvent('navigation_started')] })
 
     expect(outcome).toMatchObject({ kind: 'sent', session: { state: 'navigating' } })
     expect(keys.events).toHaveLength(2)
     expect(keys.events[1]).toBe(keys.events[0])
+    expect(mockBackend.handled('navigationEvents')).toBe(1)
   })
 
   it('두 번 다 응답이 없으면 더 보내지 않고 대기열을 그대로 돌려준다', async () => {
-    const { api, sessionId, route, keys } = await routed({ timeoutMs: 50 })
-    mockBackend.hang('navigationEvents', 2)
+    const { api, sessionId, route, keys } = await routed({ timeoutMs: 200, unansweredEvents: 2 })
     const pending = [createNavigationEvent('navigation_started')]
     const outcome = await deliverEvents({ api, sessionId, routeId: route.route_id, pending })
 
     expect(outcome).toMatchObject({ kind: 'failed', error: { code: 'TIMEOUT' }, pending })
     expect(keys.events).toHaveLength(2)
+    expect(keys.events[1]).toBe(keys.events[0])
+    expect(mockBackend.handled('navigationEvents')).toBe(0)
   })
 
   it('키를 재사용하지 못한 도착 재전송이 422면 이미 반영된 것으로 보고 navigation-state로 맞춘다', async () => {

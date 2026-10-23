@@ -33,7 +33,7 @@ describe('replyEffects', () => {
     expect(e.view.body).toBe('It depends on the train:')
   })
 
-  it('destination_set: 서버 POI id와 데모 목적지를 함께 넘기고, 열차 종류는 slots를 따른다', () => {
+  it('destination_set: 서버 POI id를 그대로 넘기고, 열차 종류는 slots를 따른다', () => {
     const e = replyEffects({
       ...base,
       status: 'destination_set',
@@ -42,14 +42,14 @@ describe('replyEffects', () => {
       next_action: 'locate',
       session: { state: 'needs_location', revision: 5 },
     })
-    expect(e.destination).toEqual({ serverPoiId: 'poi-allstop-tickets', local: 'machines' })
+    expect(e.destination).toBe('poi-allstop-tickets')
     expect(e.train).toBe('allstop')
     expect(e.session.state).toBe('needs_location')
     expect(e.view.actions).toEqual(['findMe'])
   })
 
-  it('데모 경로에 없는 서버 목적지는 local을 null로 두고 짐작하지 않는다', () => {
-    expect(replyEffects({ ...base, destination: { poi_id: 'poi-new-exit' } }).destination).toEqual({ serverPoiId: 'poi-new-exit', local: null })
+  it('데모 데이터에 없는 서버 목적지도 바꾸지 않고 그대로 넘긴다', () => {
+    expect(replyEffects({ ...base, destination: { poi_id: 'poi-new-exit' } }).destination).toBe('poi-new-exit')
   })
 
   it('relocalize면 화면의 현재 위치를 지우게 한다', () => {

@@ -58,9 +58,8 @@ export function losingFirstResponse(suffix: string, next: FetchLike = (url, init
     // 클라이언트 타임아웃과 상관없이 서버 처리는 끝까지 가게 abort 신호를 떼고 보낸다.
     const res = await next(url, { ...init, signal: undefined })
     lost.push(await res.json())
-    return new Promise((_, reject) => {
-      init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
-    })
+    // 서버 처리가 클라이언트 타임아웃보다 늦으면 여기 올 때 이미 끊겨 있다. 그때 리스너만 붙이면 영원히 기다린다
+    return noResponse(init.signal)
   }
   return { fetch, sent, lost }
 }
@@ -78,11 +77,33 @@ export function fakeFetch(replies: FakeReply[]) {
     const reply = queue.shift()
     if (!reply) return Promise.reject(new Error(`준비하지 않은 요청: ${init.method ?? 'GET'} ${url}`))
     if (reply === 'network') return Promise.reject(new TypeError('Failed to fetch'))
-    if (reply === 'timeout')
-      return new Promise((_, reject) => {
-        init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
-      })
+    if (reply === 'timeout') return noResponse(init.signal)
     return Promise.resolve(reply)
   }
   return { fetch, calls }
+}
+
+// 서버로 보내지 않고 abort될 때까지 기다린다. 이미 끊긴 신호면 바로 끊는다
+export function noResponse(signal: AbortSignal | null | undefined): Promise<Response> {
+  return new Promise((_resolve, reject) => {
+    const abort = () => reject(new DOMException('aborted', 'AbortError'))
+    if (signal?.aborted) return abort()
+    signal?.addEventListener('abort', abort, { once: true })
+  })
+}
+
+// 응답 없음(타임아웃)을 클라이언트 쪽에서 만든다 (MSW 흐름 테스트용).
+// 경로가 suffix로 끝나는 요청 중 처음 times번은 서버로 보내지 않고 abort될 때까지 기다리고, 나머지는 next로 보낸다.
+// mockBackend.hang은 요청을 undici 연결까지 보낸 뒤 끊기게 해서 그 소켓이 닫히고, 다음 요청은 새 연결을 연다.
+// @mswjs/interceptors는 새 연결에서 클라이언트가 읽기 시작한 뒤 한 틱 안에 요청 바이트가 없으면 실제 네트워크로 넘기므로
+// (http/source.ts onClientRead), 느린 러너에서는 다음 요청이 getaddrinfo ENOTFOUND로 타이머보다 먼저 실패해 NETWORK가 된다.
+export function unansweredFirst(suffix: string, times = 1, next: FetchLike = (url, init) => globalThis.fetch(url, init)): FetchLike {
+  let left = times
+  return (url, init) => {
+    if (left > 0 && url.endsWith(suffix)) {
+      left -= 1
+      return noResponse(init.signal)
+    }
+    return next(url, init)
+  }
 }

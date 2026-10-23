@@ -133,7 +133,10 @@ export const mockBackend = {
   setVision(result: VisionResult) {
     faults.vision = result
   },
-  // 이 엔드포인트의 다음 n번 요청은 응답하지 않는다. 클라이언트 타임아웃을 재현한다. Infinity면 계속 멈춘다.
+  // 이 엔드포인트의 다음 n번 요청은 응답하지 않는다. Infinity면 계속 멈춘다.
+  // 연속 요청 시 전송 계층 경쟁이 있을 수 있다. 클라이언트가 끊은 뒤 같은 주소로 보낸 다음 요청이 가끔 MSW를 빠져나가
+  // 실제 네트워크(ENOTFOUND)로 실패한다 (src/api/fakeFetch.ts unansweredFirst 주석). 타임아웃 뒤 재시도를 보는 테스트는
+  // fetch 단계에서 응답 없음을 만드는 unansweredFirst를 쓰고, 이 스위치는 핸들러를 직접 부르는 테스트에만 쓴다.
   hang(endpoint: Endpoint, times = 1) {
     faults.hangs.set(endpoint, (faults.hangs.get(endpoint) ?? 0) + times)
   },
