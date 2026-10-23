@@ -2,13 +2,13 @@
 // (idle → needs_clarification → needs_location → needs_confirmation →
 // ready_to_navigate → navigating → arrived) with in-memory mocks.
 // 세션 생성과 채팅은 VITE_API_MODE(기본 http)에 따라 서버 또는 mock 규칙(가짜 세션 서버, assistant.ts)을 쓴다.
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
-  clearSession, confirmLocation as confirmLocationApi, createSession, getMapGraph, getNavigationState, patchSession, postLocalization,
-  sendMessage,
+  clearSession, confirmLocation as confirmLocationApi, createRoute, createSession, getMapGraph, getNavigationState, isApiError, patchSession,
+  postLocalization, postNavigationEvents, sendMessage,
 } from './api'
-import type { GraphOut, NavigationStateOut, SessionStatus } from './api'
+import type { GraphOut, NavigationEvent, NavigationStateOut, SessionStatus } from './api'
 import { API_MODE } from './api/mode'
 import { classify } from './assistant'
 import type { Intent, Reply, Tip } from './assistant'
@@ -25,12 +25,17 @@ import type { LocateResult } from './features/localization/locate'
 import { candidateViews, manualPlaces, mockCandidateViews, mockManualPlaces } from './features/localization/views'
 import type { CandidateView, PlaceView } from './features/localization/views'
 import { createGraphCache } from './features/map/graphCache'
+import { createNavigationEvent } from './features/route/events'
+import type { NavigationEventType } from './features/route/events'
+import { deliverEvents, sendRoute } from './features/route/flow'
+import { mockGuide, serverGuide, toActiveRoute } from './features/route/guide'
+import type { ActiveRoute } from './features/route/guide'
+import { planReroute } from './features/route/request'
 import { useRecovery } from './features/recovery/context'
 import type { FailHandlers } from './features/recovery/context'
 import { sendWithRecovery } from './features/recovery/retry'
 import { patchLanguage } from './features/session/language'
 import { createMockSessionServer } from './features/session/mockSession'
-import { localNodeOf, serverNodeOf } from './features/session/nodeBridge'
 import { serverPoiOf } from './features/session/poiBridge'
 import { findRoute } from './route'
 import type { Step } from './route'
@@ -95,18 +100,14 @@ const MAP_ID = 'seoul-station'
 const chatApi = { sendMessage, getNavigationState }
 const sessionApi = { patchSession, getNavigationState }
 const locationApi = { postLocalization, confirmLocation: confirmLocationApi, getNavigationState }
+const routeApi = { createRoute, postNavigationEvents, getNavigationState }
+// 도착하면 표 사는 법을 이어서 묻게 할 목적지 (data.ts PoiId)
+const TICKET_POIS: ReadonlySet<PoiId> = new Set(['expressDesk', 'machines'])
 
 const isNodeId = (id: string): id is NodeId => id in NODES
 
-// 현재 위치(here)를 데모 경로(data.ts)의 노드로 읽는다. http 모드는 서버 node_id라 nodeBridge로 잇는다 (작업 4에서 지운다)
-const localNode = (id: string | null): NodeId | null => {
-  if (id === null) return null
-  if (API_MODE === 'mock') return isNodeId(id) ? id : null
-  return localNodeOf(id)
-}
-
-// 데모 경로의 노드를 현재 위치로 남길 때. http 모드는 서버 node_id로 바꿔 둔다
-const placeOf = (node: NodeId): string => (API_MODE === 'mock' ? node : serverNodeOf(node))
+// mock 모드의 현재 위치(here)는 data.ts NodeId다. http 모드는 서버 node_id를 그대로 쓰고 데모 노드로 바꾸지 않는다
+const mockNode = (id: string | null): NodeId | null => (id !== null && isNodeId(id) ? id : null)
 
 function useAppState() {
   const [lang, setLang] = useState<Lang>('en')
@@ -119,18 +120,23 @@ function useAppState() {
   const [langPending, setLangPending] = useState(false)
   const [train, setTrain] = useState<TrainType | null>(null)
   const [dest, setDest] = useState<PoiId | null>(null)
-  // 서버가 정한 목적지 POI id. dest는 데모 경로용으로 이어 붙인 값이다 (poiBridge)
+  // 서버가 정한 목적지 POI id. http 모드의 경로 요청은 이 값을 쓴다. dest는 데모 PoiId로 이은 값이다 (mock 경로, 목적지 목록, 도착 화면; poiBridge)
   const [destinationPoiId, setDestinationPoiId] = useState<string | null>(null)
   // 현재 위치. http 모드는 서버가 확정한 node_id, mock 모드는 data.ts NodeId
   const [here, setHere] = useState<string | null>(null)
+  // mock 모드의 데모 경로 (findRoute)
   const [steps, setSteps] = useState<Step[]>([])
   const [startNode, setStartNode] = useState<NodeId | null>(null)
+  // http 모드: 서버가 만든 진행 중 경로와 요청 상태. 단계 진행(stepIdx)은 두 모드 모두 화면 상태로만 둔다
+  const [activeRoute, setActiveRoute] = useState<ActiveRoute | null>(null)
+  const [routing, setRouting] = useState(false)
+  const [routeError, setRouteError] = useState<'not_found' | null>(null)
   const [stepIdx, setStepIdx] = useState(0)
   const [messages, setMessages] = useState<Msg[]>([{ id: 0, role: 'assistant', reply: { kind: 'greet' } }])
   const [photo, setPhoto] = useState<Photo | null>(null)
   // mock 모드의 데모 후보 (data.ts SCENARIOS)
   const [candidates, setCandidates] = useState<Candidate[]>([])
-  // http 모드: 지도 그래프(직접 선택 목록, 후보 이름, 작업 4의 경로 화면)와 마지막 사진 결과(후보 / 재촬영 / 503 직접 선택)
+  // http 모드: 지도 그래프(직접 선택 목록, 후보 이름, 경로 화면의 노드 이름·사진)와 마지막 사진 결과(후보 / 재촬영 / 503 직접 선택)
   const [graph, setGraph] = useState<GraphOut | null>(null)
   const [located, setLocated] = useState<LocateResult | null>(null)
   // 위치 확정 요청을 보내는 중이면 후보·목록 버튼을 잠근다
@@ -148,21 +154,24 @@ function useAppState() {
   // 다시 찍었거나 초기화한 뒤에 도착한 옛 사진 결과를 버리기 위한 번호
   const photoSeq = useRef(0)
   const graphCache = useRef(createGraphCache((mapId) => getMapGraph(mapId)))
+  // '길을 잃었어요' 뒤 위치를 다시 확정하면 같은 목적지로 다시 계산한다 (http 모드)
+  const rerouting = useRef(false)
+  // 보내지 못한 길안내 이벤트. 다음 이벤트와 함께 보내고, 경로가 바뀌면 버린다 (http 모드)
+  const pendingEvents = useRef<{ routeId: string | null; events: NavigationEvent[] }>({ routeId: null, events: [] })
   // Handlers read the latest values through this ref so delayed replies
   // never act on a stale render's state.
   const sessionId = sessionInfo?.id ?? null
-  const hasRoute = steps.length > 0
+  const hasRoute = API_MODE === 'mock' ? steps.length > 0 : activeRoute !== null
   const revision = session?.revision ?? 0
-  const live = useRef({ train, dest, here, failNext, lang, sessionId, sessionInfo, hasRoute, revision, located, confirming })
+  const live = useRef({ train, dest, destinationPoiId, here, failNext, lang, sessionId, sessionInfo, hasRoute, revision, located, confirming, activeRoute, stepIdx })
   useLayoutEffect(() => {
-    live.current = { train, dest, here, failNext, lang, sessionId, sessionInfo, hasRoute, revision, located, confirming }
+    live.current = { train, dest, destinationPoiId, here, failNext, lang, sessionId, sessionInfo, hasRoute, revision, located, confirming, activeRoute, stepIdx }
   })
 
   // 응답의 session을 그대로 반영한다. 늦게 도착한 옛 응답이 더 새 값을 덮지 않도록 revision이 작으면 버린다.
   const applySession = (next: SessionStatus) => setSession((cur) => (cur && next.revision < cur.revision ? cur : next))
 
-  // mock 모드에서만 가짜 서버가 상태를 바꾼다. http 모드의 위치·경로 흐름은 아직 서버에 알리지 않으므로
-  // (작업 3, 4) 세션도 바꾸지 않는다.
+  // mock 모드에서만 가짜 서버가 상태를 바꾼다. http 모드는 서버 응답의 session만 반영한다.
   const mockMove = (state: SessionState) => {
     if (API_MODE === 'mock') applySession(mockServer.current.advance(state))
   }
@@ -254,7 +263,7 @@ function useAppState() {
     const { here } = live.current
     setDest(poi)
     mockMove(here ? 'ready_to_navigate' : 'needs_location')
-    reply({ kind: 'destSet', poi, from: localNode(here), tip })
+    reply({ kind: 'destSet', poi, from: mockNode(here), tip })
   }
 
   const runIntent = (intent: Intent, withPhoto: boolean) => {
@@ -354,6 +363,9 @@ function useAppState() {
             setDest(e.destination.local)
             // 목적지가 바뀌면 화면의 옛 경로는 쓰지 않는다 (서버도 active_route_id를 지운다)
             setSteps([])
+            setActiveRoute(null)
+            setRouteError(null)
+            rerouting.current = false
             setStepIdx(0)
           }
           if (e.clearLocation) setHere(null)
@@ -415,7 +427,8 @@ function useAppState() {
     })
   }
 
-  const startRoute = (from: NodeId) => {
+  // mock 모드: 데모 경로(findRoute)로 길안내를 시작한다
+  const startMockRoute = (from: NodeId) => {
     const { dest } = live.current
     if (!dest) return setScreen('chat')
     const route = findRoute(from, POIS.find((p) => p.id === dest)!.node)
@@ -451,6 +464,108 @@ function useAppState() {
     const plan = resyncPlan(state.next_action, live.current.hasRoute)
     if (plan.screen === 'chat') push({ role: 'assistant', view: { ...toErrorView(error), actions: plan.actions } })
     setScreen(plan.screen)
+  }
+
+  // http 모드: 길안내 이벤트를 보낸다. 보내지 못해도 안내는 막지 않고, 남은 이벤트는 다음 이벤트와 함께 다시 보낸다.
+  // event_id는 만들 때 정해져 있어서 같은 이벤트를 다시 보내도 서버는 한 번만 반영한다
+  const report = (type: NavigationEventType, routeId: string) => {
+    const sid = live.current.sessionId
+    if (!sid) return
+    const queued = pendingEvents.current.routeId === routeId ? pendingEvents.current.events : []
+    const events = [...queued, createNavigationEvent(type)]
+    pendingEvents.current = { routeId, events }
+    void deliverEvents({ api: routeApi, sessionId: sid, routeId, pending: events }).then((outcome) => {
+      if (live.current.sessionId !== sid) return
+      if (outcome.kind === 'failed') {
+        console.warn('[route] 길안내 이벤트를 보내지 못했어요. 다음 이벤트와 함께 다시 보냅니다', { type, error: outcome.error })
+        return
+      }
+      // 보낸 것만 대기열에서 뺀다. 그사이 쌓인 이벤트는 남긴다
+      const left = outcome.kind === 'sent' ? new Set(outcome.pending) : new Set<NavigationEvent>()
+      const done = new Set(events.filter((e) => !left.has(e)).map((e) => e.event_id))
+      if (pendingEvents.current.routeId === routeId) {
+        pendingEvents.current = { routeId, events: pendingEvents.current.events.filter((e) => !done.has(e.event_id)) }
+      }
+      // closed: 도착·취소가 이미 반영돼 있었다. 다시 읽은 서버 상태를 그대로 쓴다
+      applySession(outcome.kind === 'sent' ? outcome.session : outcome.state.session)
+    })
+  }
+
+  // http 모드: 확정된 위치에서 서버 경로를 받는다. reroute면 같은 목적지로 다시 계산한다(서버는 route_id를 유지하고 route_revision만 올린다)
+  const routeOnServer = async ({ reroute, destinationPoiId: poi, revision: expected }: { reroute: boolean; destinationPoiId: string; revision: number }) => {
+    const { sessionId: sid, sessionInfo: info } = live.current
+    if (!sid || !info) return
+    const current = () => live.current.sessionId === sid
+    setRouting(true)
+    setRouteError(null)
+    setScreen('route')
+    let g: GraphOut
+    try {
+      // 노드 이름·사진과 보낼 map_version을 지도 그래프에서 읽는다
+      g = await graphCache.current.get(info.mapId)
+    } catch (error) {
+      setRouting(false)
+      if (current()) recovery.fail(error, { retry: () => void routeOnServer({ reroute, destinationPoiId: poi, revision: live.current.revision }) })
+      return
+    }
+    if (!current()) return
+    setGraph(g)
+    await sendRoute({
+      api: routeApi,
+      sessionId: sid,
+      input: { revision: expected, destinationPoiId: poi, mapVersion: g.map_version },
+      reroute,
+      onResync: (state) => current() && applySession(state.session),
+      hooks: {
+        fail: (error, handlers) => {
+          setRouting(false)
+          if (!current()) return
+          // 등록된 경로가 없으면 경로 화면 안에서 알리고 경로를 지어내지 않는다. 다른 출발 위치는 '길을 잃었어요'로 다시 고른다
+          if (isApiError(error) && error.code === 'ROUTE_NOT_FOUND') return setRouteError('not_found')
+          recovery.fail(error, handlers)
+        },
+        onSuccess: (out) => {
+          setRouting(false)
+          if (!current()) return
+          applySession(out.session)
+          rerouting.current = false
+          if (pendingEvents.current.routeId !== out.route_id) pendingEvents.current = { routeId: out.route_id, events: [] }
+          setActiveRoute(toActiveRoute(out, g))
+          setStepIdx(0)
+          // 서버는 시작 이벤트를 ready_to_navigate에서만 받는다. 안내 중에 다시 계산한 경우는 이미 navigating이다
+          if (out.session.state === 'ready_to_navigate') report('navigation_started', out.route_id)
+        },
+        onInvalidState: (state, error) => {
+          setRouting(false)
+          if (current()) resyncTo(state, error)
+        },
+        onRetry: () => setRouting(true),
+      },
+    })
+  }
+
+  // http 모드: 길을 잃은 뒤 위치를 다시 확정했을 때. navigation-state로 재탐색할 수 있는지 보고 같은 목적지로 다시 계산한다
+  const rerouteOnServer = async () => {
+    const { sessionId: sid, sessionInfo: info } = live.current
+    if (!sid || !info) return
+    const current = () => live.current.sessionId === sid
+    let loaded: [NavigationStateOut, GraphOut]
+    try {
+      loaded = await Promise.all([getNavigationState(sid), graphCache.current.get(info.mapId)])
+    } catch (error) {
+      if (current()) recovery.fail(error, { retry: () => void rerouteOnServer() })
+      return
+    }
+    if (!current()) return
+    const [state, g] = loaded
+    applySession(state.session)
+    const plan = planReroute(state, g.map_version)
+    if (plan.kind === 'needs_location') return setScreen('locate')
+    if (plan.kind === 'no_destination') {
+      rerouting.current = false
+      return setScreen('chat')
+    }
+    await routeOnServer({ reroute: true, destinationPoiId: plan.request.destination_poi_id, revision: plan.request.expected_revision })
   }
 
   // http 모드: 사진을 서버 조건(JPEG, 2MB 이하)으로 줄여 보내고, 결과에 맞는 화면으로 간다. 위치는 여기서 확정하지 않는다
@@ -532,10 +647,11 @@ function useAppState() {
           applySession(out.session)
           setHere(out.location.node_id)
           setLocated(null)
-          // 목적지가 있으면 길안내로 간다. 경로는 작업 4 전까지 데모 경로(findRoute)다
-          const node = localNode(out.location.node_id)
-          if (live.current.dest && node) startRoute(node)
-          else setScreen('chat')
+          // 길을 잃은 뒤라면 같은 목적지로 다시 계산하고, 목적지가 있으면 서버 경로로 길안내를 시작한다
+          if (rerouting.current) return void rerouteOnServer()
+          const poi = live.current.destinationPoiId
+          if (poi) return void routeOnServer({ reroute: false, destinationPoiId: poi, revision: out.session.revision })
+          setScreen('chat')
         },
         onInvalidState: (state, error) => {
           setConfirming(false)
@@ -560,26 +676,50 @@ function useAppState() {
     if (!isNodeId(nodeId)) return
     setHere(nodeId)
     mockMove('ready_to_navigate')
-    if (live.current.dest) startRoute(nodeId)
+    if (live.current.dest) startMockRoute(nodeId)
     else setScreen('chat')
   }
 
+  // 길안내 시작('길안내 시작' 버튼). 모드 분기는 여기 한 곳이다
+  const startRoute = () => {
+    const { here, destinationPoiId: poi, revision } = live.current
+    if (API_MODE === 'http') return poi ? void routeOnServer({ reroute: false, destinationPoiId: poi, revision }) : setScreen('chat')
+    if (here && isNodeId(here)) startMockRoute(here)
+  }
+
+  // '다음'은 화면의 단계만 넘긴다. 마지막 단계를 넘기면 도착이고, http 모드는 서버에 arrived를 알린다
   const nextStep = () => {
+    if (API_MODE === 'http') {
+      const route = live.current.activeRoute
+      if (!route) return
+      if (stepIdx + 1 < route.steps.length) return setStepIdx(stepIdx + 1)
+      setStepIdx(route.steps.length)
+      // 서버도 도착하면 목적지 노드를 새 현재 위치로 둔다 (backend/app/api/sessions.py)
+      setHere(route.stops[route.stops.length - 1].nodeId)
+      report('arrived', route.routeId)
+      return setScreen('arrived')
+    }
     if (stepIdx + 1 < steps.length) return setStepIdx(stepIdx + 1)
     const arrivedAt = steps.length ? steps[steps.length - 1].edge.to : startNode
     setStepIdx(steps.length)
-    setHere(arrivedAt && placeOf(arrivedAt))
+    setHere(arrivedAt)
     mockMove('arrived')
     setScreen('arrived')
   }
 
   const reportLost = () => {
+    // http 모드: 서버는 relocalize로 확정 위치만 지우고 목적지·경로는 남긴다. 위치를 다시 확정하면 같은 목적지로 다시 계산한다.
+    // navigation_cancelled는 목적지까지 지우므로 여기서는 보내지 않는다
+    if (API_MODE === 'http') rerouting.current = live.current.activeRoute !== null
     const text: Text = { en: 'I think I’m lost', ko: '길을 잃은 것 같아요' }
     say({ display: text, message: text[live.current.lang], mock: () => runIntent('lost', false) })
     setScreen('locate')
   }
 
   const reset = () => {
+    // 안내 중에 처음으로 가면 서버에 취소를 알린다. 요청 헤더는 보내는 순간 만들어지므로 세션 토큰을 지우기 전에 보낸다
+    const { activeRoute: route, stepIdx: at } = live.current
+    if (API_MODE === 'http' && route && at < route.steps.length) report('navigation_cancelled', route.routeId)
     startSeq.current++
     // 다음 "시작하기"에서 새 세션을 만든다. 서버 세션은 2시간 동안 요청이 없으면 만료된다.
     if (API_MODE === 'http') clearSession()
@@ -592,6 +732,11 @@ function useAppState() {
     setHere(null)
     setSteps([])
     setStartNode(null)
+    setActiveRoute(null)
+    setRouting(false)
+    setRouteError(null)
+    rerouting.current = false
+    pendingEvents.current = { routeId: null, events: [] }
     setStepIdx(0)
     setMessages([{ id: 0, role: 'assistant', reply: { kind: 'greet' } }])
     setPhoto(null)
@@ -608,9 +753,26 @@ function useAppState() {
     setScreen('welcome')
   }
 
-  // 경로 화면으로 돌아갈 수 있는지. http 모드의 경로는 아직 서버와 연결되지 않아서(작업 4)
-  // 서버 상태 대신 화면에 진행 중인 경로가 있는지로 판단한다.
-  const routeActive = API_MODE === 'mock' ? session?.state === 'navigating' : here !== null && stepIdx < steps.length
+  // 경로 화면으로 돌아갈 수 있는지. http 모드는 서버 경로가 있고 아직 도착하지 않았을 때다
+  // (시작 이벤트를 보내지 못해도 안내는 막지 않으므로 서버 state 대신 화면의 경로로 판단한다)
+  const routeActive = API_MODE === 'mock' ? session?.state === 'navigating' : activeRoute !== null && stepIdx < activeRoute.steps.length
+
+  // 경로 화면(노선 보기·거리뷰)이 그리는 모델. http 모드는 서버 경로와 지도 그래프, mock 모드는 데모 경로(findRoute)
+  const guide = useMemo(() => {
+    if (API_MODE === 'http') return activeRoute ? serverGuide(activeRoute, graph) : null
+    return startNode && dest ? mockGuide(steps, startNode, POIS.find((p) => p.id === dest)!.node) : null
+  }, [activeRoute, graph, steps, startNode, dest])
+
+  // 도착 화면에 보일 장소. http 모드는 지도 그래프의 이름(없으면 node id), mock 모드는 data.ts
+  const arrivedNode = graph?.nodes.find((n) => n.id === here)
+  const arrivedPlace: PlaceView | null =
+    here === null
+      ? null
+      : API_MODE === 'mock'
+        ? isNodeId(here) ? { nodeId: here, floor: NODES[here].floor, name: NODES[here].name } : null
+        : { nodeId: here, floor: arrivedNode?.floor_id ?? '', name: arrivedNode?.name ?? null }
+  // 표 사는 곳에 도착했으면 표 사는 법을 이어서 묻게 한다. dest는 서버 목적지를 데모 PoiId로 이은 값이다 (replyEffects, poiBridge)
+  const atTickets = dest !== null && TICKET_POIS.has(dest)
 
   // 후보·직접 선택 화면이 보는 목록. http 모드는 서버 후보와 지도 그래프(받는 중이면 null), mock 모드는 data.ts
   const candidateList: CandidateView[] =
@@ -624,7 +786,7 @@ function useAppState() {
 
   return {
     lang, setLang, changeLang, langPending, screen, setScreen, session, sessionInfo, applySession, starting, startSession, routeActive,
-    train, dest, destinationPoiId, here, hereNode: localNode(here), steps, startNode, stepIdx, messages, photo,
+    train, dest, destinationPoiId, here, guide, routing, routeError, arrivedPlace, atTickets, stepIdx, messages, photo,
     graph, ensureGraph, candidateList, retakeHint, manualList, manualReason, confirming, demoPhotos,
     failNext, setFailNext, uploadScenario, setUploadScenario, demoOpen, setDemoOpen,
     sendText, sendChip, sendSuggested, retry, pickDestination, startRoute, analyzePhoto, confirmLocation, nextStep, reportLost, reset,

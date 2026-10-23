@@ -1,15 +1,16 @@
 /**
  * Date: 2026-10-23
  * Author: Jung Minkyu
- * Purpose: 길안내 이벤트 빌더와 전송·재전송(같은 event_id 재사용) 동작을 검증하는 단위 테스트
+ * Purpose: 길안내 이벤트 빌더와 전송·재전송(같은 event_id·Idempotency-Key 재사용, 이미 닫힌 경로 판단) 동작을 검증하는 단위 테스트
  */
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '../../api/errors'
-import type { NavigationEventsIn, NavigationEventsOut } from '../../api/types'
+import type { MutationOptions, NavigationEventsIn, NavigationEventsOut } from '../../api/types'
 import {
   MAX_EVENTS_PER_REQUEST,
   buildNavigationEventsBody,
   createNavigationEvent,
+  isRouteAlreadyClosed,
   pendingAfter,
   sendNavigationEvents,
 } from './events'
@@ -20,11 +21,11 @@ const opts = { now: () => AT, newId: () => `evt_${++seq}` }
 
 // 보낸 본문을 기록하고, 정해 둔 응답이나 오류를 순서대로 돌려주는 가짜 어댑터
 function fakeApi(...results: Array<NavigationEventsOut | Error | ((body: NavigationEventsIn) => NavigationEventsOut)>) {
-  const calls: Array<{ sessionId: string; body: NavigationEventsIn }> = []
+  const calls: Array<{ sessionId: string; body: NavigationEventsIn; options?: MutationOptions }> = []
   return {
     calls,
-    async postNavigationEvents(sessionId: string, body: NavigationEventsIn) {
-      calls.push({ sessionId, body })
+    async postNavigationEvents(sessionId: string, body: NavigationEventsIn, options?: MutationOptions) {
+      calls.push({ sessionId, body, options })
       const next = results.shift()
       if (next instanceof Error) throw next
       if (typeof next === 'function') return next(body)
@@ -79,7 +80,7 @@ describe('sendNavigationEvents', () => {
     const api = fakeApi()
     const started = createNavigationEvent('navigation_started', opts)
     const { out, pending } = await sendNavigationEvents(api, 'ses_1', 'route_1', [started])
-    expect(api.calls).toEqual([{ sessionId: 'ses_1', body: { route_id: 'route_1', events: [started] } }])
+    expect(api.calls).toEqual([{ sessionId: 'ses_1', body: { route_id: 'route_1', events: [started] }, options: {} }])
     expect(out.session).toEqual({ state: 'navigating', revision: 7 })
     expect(pending).toEqual([])
   })
@@ -105,5 +106,36 @@ describe('sendNavigationEvents', () => {
     expect(api.calls[0].body.events).toHaveLength(MAX_EVENTS_PER_REQUEST)
     expect(api.calls[0].body.route_id).toBeNull()
     expect(pending).toEqual(queued.slice(MAX_EVENTS_PER_REQUEST))
+  })
+
+  it('다시 보낼 때 처음 요청의 Idempotency-Key를 넘기면 어댑터에 그대로 전달한다', async () => {
+    const api = fakeApi()
+    await sendNavigationEvents(api, 'ses_1', 'route_1', [createNavigationEvent('arrived', opts)], { idempotencyKey: 'key-1' })
+    expect(api.calls[0].options).toEqual({ idempotencyKey: 'key-1' })
+  })
+})
+
+describe('isRouteAlreadyClosed', () => {
+  const closed = (details: Record<string, unknown>) => new ApiError(422, 'INVALID_INPUT', 'route_id is not the active route.', null, { details })
+  const arrived = [createNavigationEvent('arrived', opts)]
+
+  it('도착·취소를 보냈는데 활성 경로가 비어 있다는 422면 이미 반영된 것으로 본다', () => {
+    expect(isRouteAlreadyClosed(closed({ active_route_id: null }), arrived)).toBe(true)
+    expect(isRouteAlreadyClosed(closed({ active_route_id: null }), [createNavigationEvent('navigation_cancelled', opts)])).toBe(true)
+  })
+
+  it('시작 이벤트만 보냈으면 반영된 것으로 보지 않는다', () => {
+    expect(isRouteAlreadyClosed(closed({ active_route_id: null }), [createNavigationEvent('navigation_started', opts)])).toBe(false)
+  })
+
+  it('다른 경로가 활성이면(목적지가 바뀜) 반영된 것으로 보지 않는다', () => {
+    expect(isRouteAlreadyClosed(closed({ active_route_id: 'route_2' }), arrived)).toBe(false)
+  })
+
+  it('본문 검증 오류(details.errors)나 다른 코드는 반영된 것으로 보지 않는다', () => {
+    expect(isRouteAlreadyClosed(closed({ errors: [{ loc: ['body', 'events'], msg: 'x' }] }), arrived)).toBe(false)
+    expect(isRouteAlreadyClosed(new ApiError(409, 'INVALID_STATE', '', null, { details: { active_route_id: null } }), arrived)).toBe(false)
+    expect(isRouteAlreadyClosed(new ApiError(0, 'TIMEOUT', ''), arrived)).toBe(false)
+    expect(isRouteAlreadyClosed(new TypeError('boom'), arrived)).toBe(false)
   })
 })
