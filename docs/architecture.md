@@ -16,23 +16,46 @@ Purpose: app의 현재(As-Is)와 목표(To-Be) 아키텍처, 기술 스택, 변�
 | agent (로컬 폴더 `infra/`) | Python, OpenAI LLM, FakeLLM 테스트, eval 17문항 | `LLMAgent`, `LLMVision`이 백엔드 규격에 맞게 구현됐지만 아직 연결 안 됨 |
 | 배포 | macserver, Caddy가 `/api/*`를 백엔드로 프록시, Tailscale Funnel | 프론트와 백엔드가 같은 origin |
 
-## 2. As-Is: 서로 호출하지 않는다
+## 2. 현재 (2026-10-23, #12 기준): 세션·채팅·언어 전환만 서버로 간다
+
+`VITE_API_MODE`(기본 `http`)로 모드를 고른다. http 모드에서도 사진 위치 인식, 위치 확정, 경로, 안내 이벤트는 아직 서버를 부르지 않는다.
 
 ```
-┌─ app (React, 브라우저) ───────────┐        ┌─ backend + agent (Python) ──────────┐
-│ screens.tsx                       │        │ FastAPI /api/v1                     │
-│   9개 화면, UI만                   │        │   sessions, routes, maps            │
-│        ↓                          │        │        ↓                            │
-│ store.tsx                         │        │ RuleAgent + NoVision                │
-│   상태 머신 (mock)                 │  ✕ 호출 │   키워드 규칙, 사진은 503            │
-│        ↓                          │   0건   │        ↓                            │
-│ assistant.ts, route.ts            │        │ Postgres + 지도 파일                 │
-│   키워드 규칙, 다익스트라           │        │   oneload-data 레포                 │
-│        ↓                          │        │                                     │
-│ data.ts                           │        │ LLMAgent (agent 레포)               │
-│   노드, 엣지, 파노라마              │        │   만들어졌지만 미연결                │
-└───────────────────────────────────┘        └─────────────────────────────────────┘
+app (React, 브라우저)                                    backend (FastAPI /api/v1)
+  screens.tsx   화면
+      ↓
+  store.tsx     상태. VITE_API_MODE로 http / mock 분기
+      │
+      ├─ [http] 세션 생성 · 채팅 · 언어 전환
+      │     features/session, chat, recovery
+      │     → src/api (http adapter, fetch)  ──────────▶  POST /sessions
+      │                                                   POST /sessions/{id}/messages
+      │                                                   PATCH /sessions/{id}
+      │                                                   GET  /sessions/{id}/navigation-state
+      │
+      ├─ [http] 사진 위치 · 위치 확정 · 경로 · 안내 이벤트   ✕ 아직 호출하지 않음 (작업 3·4)
+      │     data.ts의 SCENARIOS, route.ts의 findRoute
+      │
+      └─ [mock] 전부 로컬
+            features/session/mockSession.ts, assistant.ts, route.ts, data.ts
 ```
+
+| 백엔드 엔드포인트 | `src/api` 함수 | 화면에서 호출 (http 모드) |
+| --- | --- | --- |
+| `POST /sessions` | `createSession` | 연결됨: 시작 화면의 Start |
+| `POST /sessions/{id}/messages` | `sendMessage` | 연결됨: 채팅 입력·칩·추천 답변, 목적지 목록 선택, "길을 잃었어요" |
+| `PATCH /sessions/{id}` | `patchSession` | 연결됨: 세션 시작 후 언어 전환 |
+| `GET /sessions/{id}/navigation-state` | `getNavigationState` | 연결됨: 언어 전환의 409 재동기화, 채팅의 `INVALID_STATE` 재동기화 |
+| `POST /sessions/{id}/localizations` | `postLocalization` | 로컬: `features/localization/locate.ts`는 있지만 화면은 `SCENARIOS`를 쓴다 (작업 3) |
+| `POST /sessions/{id}/location-confirmations` | `confirmLocation` | 로컬: `features/localization/confirm.ts`는 있지만 화면은 상태만 바꾼다 (작업 3) |
+| `GET /maps/{id}/graph` | `getMapGraph` | 로컬: 직접 선택 목록은 `data.ts`를 쓴다. `features/localization/manualNodes.ts`는 미사용 (작업 3) |
+| `POST /sessions/{id}/routes` | `createRoute` | 로컬: `route.ts`의 `findRoute`로 계산한다. `features/route/request.ts`, `toSteps.ts`는 미사용 (작업 4) |
+| `POST /sessions/{id}/navigation-events` | `postNavigationEvents` | 로컬: 보내지 않는다. `features/route/events.ts`는 미사용 (작업 4) |
+| `GET /health`, `GET /maps`, `GET /maps/{id}/pois`, `POST /sessions/{id}/feedback` | `getHealth` 등 | 화면에서 쓰지 않는다 |
+
+- mock 모드는 아직 `ApiAdapter` 구현이 아니라 `store.tsx`의 `API_MODE` 분기로 동작한다. 3장의 mock adapter는 목표 구조다.
+- http 모드에서 위치·경로 단계는 서버에 알리지 않으므로 서버 세션의 `state`·`revision`도 그 단계에서는 바뀌지 않는다.
+- 백엔드 쪽은 그대로다: `RuleAgent`(키워드 규칙)와 `NoVision`(사진은 503)이 기본이고, agent 레포의 `LLMAgent`는 아직 연결되지 않았다.
 
 ## 3. To-Be: API 계층을 두고 서버를 진실로 삼는다
 

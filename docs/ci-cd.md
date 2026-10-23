@@ -38,10 +38,14 @@ CD(지속적 배포)는 main에 합쳐진 결과를 사람 손 없이 서버에 
 
 ### e2e job
 
-- `package.json`에 `test:e2e` 스크립트가 없으면 설치와 실행 단계를 건너뛰고 통과로 표시된다. 작업 6(Playwright)에서 스크립트가 생기면 그때부터 실제로 돈다.
+- 작업 6에서 `test:e2e` 스크립트가 생겨서 지금은 실제로 돈다. 실행되는 테스트는 `e2e/smoke.spec.ts` 1건(mock 모드에서 시작 화면이 뜨는지)이다. 스크립트가 없으면 설치와 실행 단계를 건너뛰고 통과로 표시하는 조건은 그대로 남아 있다.
 - `pnpm install` 다음에 `pnpm exec playwright install --with-deps chromium`으로 브라우저와 시스템 라이브러리를 받는다. 러너에는 둘 다 없다.
 - 실패하면 `test-results/`(실패한 테스트의 트레이스)를 `e2e-test-results` artifact로 올린다(7일 보관). HTML 리포트는 만들지 않는다.
 - verify와 `needs`로 묶지 않았다. 한쪽이 실패해도 다른 쪽 결과를 볼 수 있게 하려는 것이다.
+
+### 검증 범위: 무엇을 증명하고 무엇을 증명하지 않는가
+
+CI의 vitest(MSW 계약 테스트 포함)와 Playwright 스모크는 모두 서버 없이 돈다. vitest는 가짜 fetch와 MSW 핸들러(`src/test/handlers.ts`, 타입은 OpenAPI에서 생성한 `src/api/schema.d.ts`)로 백엔드를 흉내 내어, 클라이언트가 계약대로 요청을 만들고 409·503·타임아웃 같은 응답을 처리하는지 확인한다. Playwright 스모크(`e2e/smoke.spec.ts`, mock 모드 1건)는 앱이 실행되어 시작 화면이 뜨는지만 본다. 그래서 CI가 초록이어도 실서버에서 채팅 → 사진 → 경로 전체 흐름이 동작한다는 증거는 아니다. MSW 핸들러는 우리가 이해한 계약을 흉내 낸 것이라 실제 서버의 답변 문구(`RuleAgent`), 응답 시점, 지도 데이터와 다를 수 있다. 실서버 확인은 각 PR 본문의 브라우저 확인 절(예: #12의 "브라우저(http, 로컬 백엔드)")을 본다.
 
 ## 3. CD 초안: `deploy.yml`
 
