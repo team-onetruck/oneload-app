@@ -14,7 +14,7 @@ Purpose: Claude Code가 이 레포에서 따를 프로젝트 규칙, 검증 명�
 - `pnpm dev`: 개발 서버 (http://localhost:5173)
 - `pnpm verify`: 헤더 검사 + lint + 타입체크 + 단위 테스트. 모든 작업은 이게 통과해야 끝난 것이다.
 - `pnpm test`: vitest 1회 실행
-- `pnpm e2e`: Playwright E2E. 개발 서버를 `VITE_API_MODE=mock`으로 띄운다. 느려서 verify에는 넣지 않는다. 처음 한 번 `pnpm exec playwright install chromium`
+- `pnpm e2e`: Playwright E2E 9개. 개발 서버를 mock(4179)·http(4180) 모드로 하나씩 띄우고, http 시나리오는 `page.route`로 `/api/v1`을 MSW 핸들러가 답한다. 느려서 verify에는 넣지 않는다. 처음 한 번 `pnpm exec playwright install chromium`
 - `pnpm build`: 타입체크 후 프로덕션 빌드
 
 ## 작성 규칙 (사용자 지정)
@@ -46,10 +46,12 @@ Purpose: Claude Code가 이 레포에서 따를 프로젝트 규칙, 검증 명�
 - 기존 코드 스타일을 따른다: 세미콜론 없음, 작은따옴표, 2칸 들여쓰기, 타입은 `import type`.
 - 테스트는 코드 옆에 `*.test.ts`로 둔다.
 
-## 현재 작업: mock을 백엔드로 교체 (`feature/api-integration`)
+## API 연동 (작업 0~7 완료)
 
-지금은 `src/store.tsx`, `src/assistant.ts`, `src/route.ts`가 서버를 흉내 낸다.
+화면의 모든 기능은 `src/api`의 `ApiAdapter`를 거친다. http 모드(기본)는 `src/api/httpAdapter.ts`로 백엔드 `/api/v1`을 부르고,
+`VITE_API_MODE=mock`이면 같은 호출을 `src/api/mockAdapter.ts`가 서버 없이 받는다. 어댑터는 `src/api/index.ts`에서 한 번 고른다.
 백엔드 계약은 `../backend/app/schemas.py`이고 `/api/v1/docs`에서 볼 수 있다. 백엔드 코드는 읽기만 한다.
+구조는 `docs/architecture.md`, 기능별 동작은 `README.md`, CI/CD는 `docs/ci-cd.md`를 본다.
 
 ### 규칙
 
@@ -60,7 +62,7 @@ Purpose: Claude Code가 이 레포에서 따를 프로젝트 규칙, 검증 명�
 - 사진 업로드에서 `503 AI_SERVICE_UNAVAILABLE`이 오면 직접 선택 화면으로 넘기고, 위치를 추측하지 않는다.
 - 요금, 위치, 경로를 지어내지 않는다. 서버의 `unverified_notes`는 "Not verified"로 그대로 보여 준다.
 - 위치는 사용자가 명시적으로 고른 경우에만 확정한다.
-- 서버 없이도 데모가 돌도록 mock 경로는 어댑터 뒤에 남겨 둔다.
+- 서버 없이도 데모가 돌도록 mock 규칙은 `src/api/mockAdapter.ts`(ApiAdapter 구현)에만 둔다. store와 화면은 어댑터만 보고 모드로 분기하지 않는다. 데모 전용 UI(데모 사진)는 `src/api/index.ts`의 `demoMode`로만 가린다.
 
 ### 작업 목록 (한 항목 = 한 PR, 끝나면 체크)
 
@@ -70,5 +72,5 @@ Purpose: Claude Code가 이 레포에서 따를 프로젝트 규칙, 검증 명�
 - [x] 3. 사진 업로드 + 위치 확정 (503 폴백 포함)
 - [x] 4. 경로 + 이벤트 연동 (서버 `steps`로 안내, 도착 이벤트 전송)
 - [x] 5. 오류 복구 (409 재동기화, 타임아웃 재시도)
-- [ ] 6. MSW 테스트 하네스와 Playwright 시나리오 3개
+- [x] 6. MSW 테스트 하네스와 Playwright 시나리오 3개
 - [x] 7. GitHub Actions에서 `pnpm verify` 실행

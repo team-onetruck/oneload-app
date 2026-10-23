@@ -14,7 +14,7 @@ CD(지속적 배포)는 main에 합쳐진 결과를 사람 손 없이 서버에 
 
 | 워크플로 | 파일 | 언제 | 하는 일 | 상태 |
 | --- | --- | --- | --- | --- |
-| CI | `.github/workflows/ci.yml` | 모든 브랜치 push, 모든 PR | `pnpm verify`, e2e(스크립트가 있을 때만) | 동작 중 |
+| CI | `.github/workflows/ci.yml` | 모든 브랜치 push, 모든 PR | `pnpm verify`, e2e(Playwright 9개) | 동작 중 |
 | Deploy | `.github/workflows/deploy.yml` | 지금은 수동 실행만 (`workflow_dispatch`) | main을 검증·빌드해 macserver의 `~/hangil-demo/dist`로 동기화 | 초안. 관리자 설정 후 push 트리거 활성화 |
 
 ## 2. CI: `ci.yml`
@@ -38,14 +38,24 @@ CD(지속적 배포)는 main에 합쳐진 결과를 사람 손 없이 서버에 
 
 ### e2e job
 
-- 작업 6에서 `test:e2e` 스크립트가 생겨서 지금은 실제로 돈다. 실행되는 테스트는 4건이다. `e2e/smoke.spec.ts`(mock 모드, 시작 화면)와 `e2e/scenarios/` 시나리오 3개(http 모드, `/api/v1`을 `page.route`로 가로채 MSW 핸들러가 답함)다. 개발 서버는 모드마다 하나씩(4179, 4180) 뜬다. 스크립트가 없으면 설치와 실행 단계를 건너뛰고 통과로 표시하는 조건은 그대로 남아 있다.
-- `pnpm install` 다음에 `pnpm exec playwright install --with-deps chromium`으로 브라우저와 시스템 라이브러리를 받는다. 러너에는 둘 다 없다.
+- `pnpm test:e2e`로 9개를 돌린다. `playwright.config.ts`가 개발 서버를 모드마다 하나씩 띄운다.
+
+  | 프로젝트 | 개발 서버 | 테스트 |
+  | --- | --- | --- |
+  | `mock` | `VITE_API_MODE=mock`, 4179 | `e2e/smoke.spec.ts`(시작 화면) 1개, `e2e/mock/` 기준선 5개(서버 없는 데모 흐름, `/api`로 나가는 요청이 없는지) |
+  | `http` | `VITE_API_MODE=http`, 4180 | `e2e/scenarios/` 3개(직통열차, 일반열차+카드 없음, 사진 503 → 직접 선택). `/api/v1`은 `page.route`로 가로채 MSW 핸들러가 답한다 |
+
+  `test:e2e` 스크립트가 없으면 설치와 실행 단계를 건너뛰고 통과로 표시하는 조건은 그대로 남아 있다.
+- 브라우저 설치는 캐시를 쓴다. 설치된 `@playwright/test` 버전으로 `~/.cache/ms-playwright`를 캐시하고(키: OS, 아키텍처, Playwright 버전), 버전이 같으면 받는 chromium도 같다.
+  - 캐시가 없으면 `pnpm exec playwright install --with-deps chromium`으로 브라우저와 시스템 라이브러리를 함께 받는다.
+  - 캐시가 있으면 `pnpm exec playwright install chromium`으로 브라우저만 확인하고 시스템 라이브러리(apt) 설치는 건너뛴다. apt 미러가 느리면 이 단계가 몇 분씩 걸렸기 때문이다. chromium 실행에 필요한 라이브러리는 러너 이미지에 이미 있다.
+  - 대가: CJK 폰트가 없어 실패 트레이스 스크린샷의 한국어가 네모로 보인다(스크린샷 비교 테스트는 없다). 러너 이미지가 바뀌어 브라우저가 missing dependencies로 실패하면 install-deps를 되살리거나 캐시 키를 바꾼다.
 - 실패하면 `test-results/`(실패한 테스트의 트레이스)를 `e2e-test-results` artifact로 올린다(7일 보관). HTML 리포트는 만들지 않는다.
 - verify와 `needs`로 묶지 않았다. 한쪽이 실패해도 다른 쪽 결과를 볼 수 있게 하려는 것이다.
 
 ### 검증 범위: 무엇을 증명하고 무엇을 증명하지 않는가
 
-CI의 vitest(MSW 계약 테스트 포함)와 Playwright 스모크는 모두 서버 없이 돈다. vitest는 가짜 fetch와 MSW 핸들러(`src/test/handlers.ts`, 타입은 OpenAPI에서 생성한 `src/api/schema.d.ts`)로 백엔드를 흉내 내어, 클라이언트가 계약대로 요청을 만들고 409·503·타임아웃 같은 응답을 처리하는지 확인한다. Playwright 스모크(`e2e/smoke.spec.ts`, mock 모드 1건)는 앱이 실행되어 시작 화면이 뜨는지만 본다. Playwright 시나리오(`e2e/scenarios/`, http 모드 3건)는 실제 화면과 http 어댑터로 채팅 → 사진(또는 503 뒤 직접 선택) → 위치 확정 → 경로 → 길안내 이벤트를 따라가지만, 응답은 같은 MSW 핸들러가 만든다. 그래서 CI가 초록이어도 실서버에서 채팅 → 사진 → 경로 전체 흐름이 동작한다는 증거는 아니다. MSW 핸들러는 우리가 이해한 계약을 흉내 낸 것이라 실제 서버의 답변 문구(`RuleAgent`), 응답 시점, 지도 데이터와 다를 수 있다. 실서버 확인은 각 PR 본문의 브라우저 확인 절(예: #12의 "브라우저(http, 로컬 백엔드)")을 본다.
+CI의 vitest(MSW 계약 테스트 포함)와 Playwright 스모크는 모두 서버 없이 돈다. vitest는 가짜 fetch와 MSW 핸들러(`src/test/handlers.ts`, 타입은 OpenAPI에서 생성한 `src/api/schema.d.ts`)로 백엔드를 흉내 내어, 클라이언트가 계약대로 요청을 만들고 409·503·타임아웃 같은 응답을 처리하는지 확인한다. Playwright 스모크(`e2e/smoke.spec.ts`, mock 모드 1건)는 앱이 실행되어 시작 화면이 뜨는지만 보고, mock 기준선(`e2e/mock/`, 5건)은 서버 없는 데모 흐름이 그대로이고 서버로 나가는 요청이 없는지 본다. Playwright 시나리오(`e2e/scenarios/`, http 모드 3건)는 실제 화면과 http 어댑터로 채팅 → 사진(또는 503 뒤 직접 선택) → 위치 확정 → 경로 → 길안내 이벤트를 따라가지만, 응답은 같은 MSW 핸들러가 만든다. 그래서 CI가 초록이어도 실서버에서 채팅 → 사진 → 경로 전체 흐름이 동작한다는 증거는 아니다. MSW 핸들러는 우리가 이해한 계약을 흉내 낸 것이라 실제 서버의 답변 문구(`RuleAgent`), 응답 시점, 지도 데이터와 다를 수 있다. 실서버 확인은 각 PR 본문의 브라우저 확인 절(예: #12의 "브라우저(http, 로컬 백엔드)")을 본다.
 
 ## 3. CD 초안: `deploy.yml`
 
