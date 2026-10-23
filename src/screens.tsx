@@ -262,7 +262,7 @@ function AssistantMsg({ m, latest }: { m: Msg; latest: boolean }) {
   const doAction = (a: ChatAction) => {
     if (a === 'findMe' || a === 'retake') app.setScreen('locate')
     if (a === 'pickLocation') app.setScreen('manual')
-    if (a === 'startRoute' && app.here) app.startRoute(app.here)
+    if (a === 'startRoute' && app.hereNode) app.startRoute(app.hereNode)
     if (a === 'retry') app.retry()
     if (a === 'pickDest') app.setScreen('destinations')
     if (a === 'restart') app.reset()
@@ -765,7 +765,8 @@ export function RouteScreen() {
 
 export function Arrived() {
   const app = useApp()
-  const { lang, here } = app
+  // 데모 경로의 도착 노드 (http 모드는 서버 node_id를 nodeBridge로 이은 값)
+  const { lang, hereNode: here } = app
   const [rating, setRating] = useState(0)
   if (!here) return null
   const atTickets = here === 'expressDesk' || here === 'machines'

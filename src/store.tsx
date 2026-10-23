@@ -21,6 +21,7 @@ import type { FailHandlers } from './features/recovery/context'
 import { sendWithRecovery } from './features/recovery/retry'
 import { patchLanguage } from './features/session/language'
 import { createMockSessionServer } from './features/session/mockSession'
+import { localNodeOf, serverNodeOf } from './features/session/nodeBridge'
 import { serverPoiOf } from './features/session/poiBridge'
 import { findRoute } from './route'
 import type { Step } from './route'
@@ -80,6 +81,18 @@ const MAP_ID = 'seoul-station'
 const chatApi = { sendMessage, getNavigationState }
 const sessionApi = { patchSession, getNavigationState }
 
+const isNodeId = (id: string): id is NodeId => id in NODES
+
+// 현재 위치(here)를 데모 경로(data.ts)의 노드로 읽는다. http 모드는 서버 node_id라 nodeBridge로 잇는다 (작업 4에서 지운다)
+const localNode = (id: string | null): NodeId | null => {
+  if (id === null) return null
+  if (API_MODE === 'mock') return isNodeId(id) ? id : null
+  return localNodeOf(id)
+}
+
+// 데모 경로의 노드를 현재 위치로 남길 때. http 모드는 서버 node_id로 바꿔 둔다
+const placeOf = (node: NodeId): string => (API_MODE === 'mock' ? node : serverNodeOf(node))
+
 function useAppState() {
   const [lang, setLang] = useState<Lang>('en')
   const [screen, setScreen] = useState<Screen>('welcome')
@@ -93,7 +106,8 @@ function useAppState() {
   const [dest, setDest] = useState<PoiId | null>(null)
   // 서버가 정한 목적지 POI id. dest는 데모 경로용으로 이어 붙인 값이다 (poiBridge)
   const [destinationPoiId, setDestinationPoiId] = useState<string | null>(null)
-  const [here, setHere] = useState<NodeId | null>(null)
+  // 현재 위치. http 모드는 서버가 확정한 node_id, mock 모드는 data.ts NodeId
+  const [here, setHere] = useState<string | null>(null)
   const [steps, setSteps] = useState<Step[]>([])
   const [startNode, setStartNode] = useState<NodeId | null>(null)
   const [stepIdx, setStepIdx] = useState(0)
@@ -216,7 +230,7 @@ function useAppState() {
     const { here } = live.current
     setDest(poi)
     mockMove(here ? 'ready_to_navigate' : 'needs_location')
-    reply({ kind: 'destSet', poi, from: here, tip })
+    reply({ kind: 'destSet', poi, from: localNode(here), tip })
   }
 
   const runIntent = (intent: Intent, withPhoto: boolean) => {
@@ -411,7 +425,7 @@ function useAppState() {
     if (stepIdx + 1 < steps.length) return setStepIdx(stepIdx + 1)
     const arrivedAt = steps.length ? steps[steps.length - 1].edge.to : startNode
     setStepIdx(steps.length)
-    setHere(arrivedAt)
+    setHere(arrivedAt && placeOf(arrivedAt))
     mockMove('arrived')
     setScreen('arrived')
   }
@@ -452,7 +466,7 @@ function useAppState() {
 
   return {
     lang, setLang, changeLang, langPending, screen, setScreen, session, sessionInfo, applySession, starting, startSession, routeActive,
-    train, dest, destinationPoiId, here, steps, startNode, stepIdx, messages, photo, candidates,
+    train, dest, destinationPoiId, here, hereNode: localNode(here), steps, startNode, stepIdx, messages, photo, candidates,
     failNext, setFailNext, uploadScenario, setUploadScenario, demoOpen, setDemoOpen,
     sendText, sendChip, sendSuggested, retry, pickDestination, startRoute, analyzePhoto, confirmLocation, nextStep, reportLost, reset,
   }
