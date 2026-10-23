@@ -7,6 +7,7 @@ import '@photo-sphere-viewer/core/index.css'
 import '@photo-sphere-viewer/markers-plugin/index.css'
 import { Compass, ImageOff, LocateFixed } from 'lucide-react'
 import type { Lang } from './data'
+import { legDistanceLabel } from './features/route/guide'
 import type { GuideLeg, GuidePano } from './features/route/guide'
 import { UI } from './i18n'
 
@@ -19,9 +20,7 @@ const ARROW_PATH = '<path d="M32 4 60 36H43v24H21V36H4Z"/>'
 
 // 화살표 방향(yawDeg)은 경로 모델이 정한다: 서버 arrow_yaw_deg 우선, 없으면 northYaw + heading (features/route/guide.ts)
 function arrowMarker(leg: GuideLeg, lang: Lang, yaw: number): MarkerConfig {
-  const from = leg.from.floor
-  const to = leg.to.floor
-  const label = !leg.floorChange || !from || !to ? `${leg.distanceM} m` : `${leg.distanceM} m · ${from} → ${to}`
+  const label = legDistanceLabel(leg)
   return {
     id: 'next',
     position: { yaw, pitch: ARROW_PITCH },

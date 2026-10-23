@@ -49,6 +49,15 @@ export interface GuideLeg {
   pano: GuidePano | null
   // 사진 위 화살표 방향. 서버 arrow_yaw_deg를 우선하고, 없으면 northYaw + heading. 둘 다 없으면 화살표를 그리지 않는다
   yawDeg: number | null
+  // 이 단계 통로의 지도 방위, 0 = 북쪽, 시계 방향 (Edge.heading_deg). 라이브 뷰가 폰 나침반과 비교한다. 그래프에 없으면 null
+  headingDeg: number | null
+}
+
+// 화살표 아래 알약에 쓰는 문구: 거리, 층이 바뀌면 층도 함께
+export function legDistanceLabel(leg: Pick<GuideLeg, 'distanceM' | 'floorChange' | 'from' | 'to'>): string {
+  const from = leg.from.floor
+  const to = leg.to.floor
+  return !leg.floorChange || !from || !to ? `${leg.distanceM} m` : `${leg.distanceM} m · ${from} → ${to}`
 }
 
 export interface RouteGuide {
@@ -80,6 +89,7 @@ export function serverGuide(route: ActiveRoute, graph: GraphOut | null): RouteGu
       floorChange: step.floorChange,
       pano: pano ? { src: pano.image_url, example: pano.is_example ? UI.svExample : null } : null,
       yawDeg: arrowYawDeg(step),
+      headingDeg: step.fallback?.headingDeg ?? null,
     }
   })
   return { destination: stops[stops.length - 1], stops, legs }

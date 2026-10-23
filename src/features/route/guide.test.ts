@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import type { RouteOut } from '../../api/types'
 import { UI } from '../../i18n'
 import { GRAPH } from '../../test/fixtures/seoulStation'
-import { serverGuide, toActiveRoute } from './guide'
+import { legDistanceLabel, serverGuide, toActiveRoute } from './guide'
 
 // 가짜 백엔드가 4호선 개찰구 → 직통열차 표 사는 곳으로 돌려주는 경로와 같은 모양. 두 번째 단계는 사진이 없다고 둔다
 const route: RouteOut = {
@@ -76,7 +76,20 @@ describe('serverGuide', () => {
       instruction: { en: 'server en 1', ko: '서버 문구 1' },
       floorChange: true,
       yawDeg: -80,
+      headingDeg: 240,
     })
+  })
+
+  it('통로의 지도 방위(heading_deg)를 라이브 뷰용으로 단계에 싣고, 그래프가 없으면 null이다', () => {
+    const legs = serverGuide(toActiveRoute(route, GRAPH), GRAPH).legs
+    expect(legs.map((l) => l.headingDeg)).toEqual([240, 90])
+    expect(serverGuide(toActiveRoute(route), null).legs.map((l) => l.headingDeg)).toEqual([null, null])
+  })
+
+  it('층이 바뀌는 단계의 알약 문구에는 층을 함께 쓴다', () => {
+    const [first, second] = serverGuide(toActiveRoute(route, GRAPH), GRAPH).legs
+    expect(legDistanceLabel(first)).toBe('110 m · B1 → B2')
+    expect(legDistanceLabel(second)).toBe('30 m')
   })
 
   it('사진은 pano_id로 그래프의 image_url을 찾고, 예시 사진이면 공통 예시 문구를 붙인다', () => {
