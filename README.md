@@ -41,7 +41,7 @@ http 모드의 기능별 상태 (`src/store.tsx` 기준):
 | 채팅 (입력, 칩, 추천 답변) | 서버 연결됨 | `POST /sessions/{id}/messages`. 답변·목록·출처와 `unverified_notes`("Not verified", 한국어 화면은 "확인되지 않음")는 서버 응답을 표시한다. 사진을 붙이면 JPEG 2MB 이하로 줄여 multipart로 보낸다. 지금 단계에서 할 수 없는 요청(`INVALID_STATE`)이면 `GET /sessions/{id}/navigation-state`로 상태를 다시 읽는다 |
 | 목적지 목록에서 고르기 | 서버 연결됨 | 목록은 `GET /maps/{id}/pois`를 지도마다 한 번 받아 이름(한·영), 분류, 열차, 층을 보여 주고, `verified: false`면 "확인되지 않음"을 붙인다(지금 서버는 확인된 장소만 돌려준다). 고른 서버 `poi_id`를 그대로 `selected_poi_id`로 `/messages`에 보낸다 |
 | "길을 잃었어요" | 서버 연결됨 | 문장을 `/messages`로 보내고(서버는 확정 위치만 지우고 목적지·경로는 남긴다) 위치 확인 화면으로 넘어간다. 위치를 다시 확정하면 `GET /sessions/{id}/navigation-state`로 확인한 뒤 같은 목적지를 `reroute: true`로 다시 계산한다 |
-| 언어 전환 (세션 시작 후) | 서버 연결됨 | `PATCH /sessions/{id}`. `409 REVISION_CONFLICT`면 navigation-state로 맞춘 뒤 한 번 다시 보낸다. 세션 전에는 화면 언어만 바꾼다 |
+| 언어 전환 (세션 시작 후) | 서버 연결됨 | 왼쪽 위 햄버거 메뉴의 언어 목록에서 바꾼다. 시작 언어는 기기 언어를 따른다. `PATCH /sessions/{id}`, `409 REVISION_CONFLICT`면 navigation-state로 맞춘 뒤 한 번 다시 보낸다 |
 | 사진으로 위치 찾기 | 서버 연결됨 | JPEG 2MB 이하로 줄여 `POST /sessions/{id}/localizations`로 보낸다. 후보는 근거와 함께 보여 주고 저절로 확정하지 않는다. 후보가 없으면 서버의 `retake_hint`를, `503 AI_SERVICE_UNAVAILABLE`(지금 서버의 `NoVision`)이면 직접 선택 화면을 보여 준다. 데모 사진은 mock 모드에서만 보인다 |
 | 위치 확정 | 서버 연결됨 | 사용자가 누른 후보(`photo_candidate`)나 목록 항목(`manual`)만 `POST /sessions/{id}/location-confirmations`로 보낸다. `409 REVISION_CONFLICT`면 navigation-state로 맞춘 뒤 한 번 다시 보낸다. 직접 선택 목록은 `GET /maps/{id}/graph`의 노드 전체다 |
 | 경로 안내 | 서버 연결됨 | 위치 확정 뒤(또는 "길안내 시작") `POST /sessions/{id}/routes`. 단계의 문구·거리·사진(`pano_id`)·화살표(`arrow_yaw_deg`)는 서버 값을 쓰고, 노드 이름과 사진 주소는 `GET /maps/{id}/graph`에서 찾는다. `409 REVISION_CONFLICT`면 navigation-state로 맞춘 뒤 한 번 다시 보낸다. 등록된 경로가 없으면(`ROUTE_NOT_FOUND`) 경로를 지어내지 않고 안내만 보여 준다 |
