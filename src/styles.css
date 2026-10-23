@@ -455,6 +455,25 @@ button {
   color: var(--muted);
   text-align: center;
 }
+.start-error {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.start-error svg {
+  flex: none;
+  margin-top: 2px;
+}
+.btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
 
 /* ---------- Chat ---------- */
 

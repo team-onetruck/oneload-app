@@ -25,6 +25,21 @@ pnpm build      # static files in dist/
 
 Desktop shows a 390×844 phone frame; on a phone it fills the screen.
 
+### 백엔드 연결 (`VITE_API_MODE`)
+
+| 값 | 동작 |
+| --- | --- |
+| `http` (기본) | 시작 화면에서 `POST /api/v1/sessions`로 세션을 만들고, 채팅은 `POST /sessions/{id}/messages` 응답으로 동작한다 |
+| `mock` | 서버 없이 기존 데모 규칙(`assistant.ts`, `route.ts`)으로 동작한다 |
+
+개발 서버는 `/api`를 `VITE_API_PROXY_TARGET`(기본 `http://127.0.0.1:8000`)으로 프록시한다. 배포처럼 같은 origin이라 CORS 설정이 필요 없다.
+
+```sh
+pnpm dev                                                                  # 로컬 백엔드 (../backend README의 Run locally)
+VITE_API_PROXY_TARGET=https://baki-macbookpro.tail3286a4.ts.net:10000 pnpm dev   # 배포 서버
+VITE_API_MODE=mock pnpm dev                                               # 서버 없이
+```
+
 ## Deploy (macserver)
 
 `dist/` is synced to `macserver:~/hangil-demo/dist`. Caddy on `127.0.0.1:4173` serves it (zstd/gzip, immutable cache for `/assets`), proxies `/api/*` to the backend and serves `/panos/*` from [oneload-data](https://github.com/team-onetruck/oneload-data); Tailscale Funnel exposes all of it at `https://baki-macbookpro.tail3286a4.ts.net:10000/`. The server setup lives in [oneload-infra](https://github.com/team-onetruck/oneload-infra).

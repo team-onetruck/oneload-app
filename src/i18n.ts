@@ -4,6 +4,8 @@ export const UI = {
   tagline: { en: 'Not sure how tickets, cards and cash work here? Ask in your own words, then follow the line.', ko: '표·카드·현금 쓰는 법이 헷갈리면 편하게 물어보세요. 그다음 길을 따라가면 돼요.' },
   chooseLang: { en: 'Choose your language', ko: '언어를 선택하세요' },
   start: { en: 'Start', ko: '시작하기' },
+  connecting: { en: 'Connecting to Hangil…', ko: '한길에 연결하는 중…' },
+  startFailed: { en: 'Couldn’t connect to Hangil. Check your connection and try again.', ko: '한길에 연결하지 못했어요. 연결을 확인하고 다시 시도해 주세요.' },
   demoNote: { en: 'Prototype. Floors follow the AREX official guide; passages and distances await a field survey.', ko: '프로토타입이에요. 층 정보는 AREX 공식 안내 기준, 통로·거리는 현장 확인 전이에요.' },
   station: { en: 'Seoul Station · AREX', ko: '서울역 · 공항철도' },
   askPlaceholder: { en: 'e.g. “Can I pay with a credit card?”', ko: '예: “신용카드로 낼 수 있어요?”' },

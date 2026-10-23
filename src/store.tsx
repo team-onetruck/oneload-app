@@ -1,12 +1,19 @@
 // PROTOTYPE session flow. Mirrors the backend session state machine
 // (idle → needs_clarification → needs_location → needs_confirmation →
 // ready_to_navigate → navigating → arrived) with in-memory mocks.
+// 세션 생성은 VITE_API_MODE(기본 http)에 따라 서버 또는 가짜 세션 서버를 쓴다.
 import { createContext, useContext, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { clearSession, createSession } from './api'
+import type { SessionStatus } from './api'
+import { API_MODE } from './api/mode'
 import { classify } from './assistant'
 import type { Intent, Reply, Tip } from './assistant'
 import { NODES, POIS, SCENARIOS } from './data'
 import type { Candidate, Lang, NodeId, PhotoScenario, PoiId, Text, TrainType } from './data'
+import { toErrorView } from './features/chat/toViewModel'
+import type { ErrorView } from './features/chat/toViewModel'
+import { createMockSessionServer } from './features/session/mockSession'
 import { findRoute } from './route'
 import type { Step } from './route'
 
@@ -35,13 +42,24 @@ export interface Photo {
   scenario: PhotoScenario
 }
 
+// 서버 세션의 식별 정보. 토큰은 src/api 클라이언트가 보관한다.
+export interface SessionInfo {
+  id: string
+  mapId: string
+  mapVersion: string
+}
+
 const AI_DELAY_MS = 900
 const VISION_DELAY_MS = 1600
+const MAP_ID = 'seoul-station'
 
 function useAppState() {
   const [lang, setLang] = useState<Lang>('en')
   const [screen, setScreen] = useState<Screen>('welcome')
-  const [session, setSession] = useState<{ state: SessionState; revision: number }>({ state: 'idle', revision: 1 })
+  // state·revision은 서버(mock 모드에서는 가짜 서버) 응답의 session 필드로만 바뀐다. 시작 전에는 null
+  const [session, setSession] = useState<SessionStatus | null>(null)
+  const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null)
+  const [starting, setStarting] = useState<{ pending: boolean; error: ErrorView | null }>({ pending: false, error: null })
   const [train, setTrain] = useState<TrainType | null>(null)
   const [dest, setDest] = useState<PoiId | null>(null)
   const [here, setHere] = useState<NodeId | null>(null)
@@ -56,6 +74,9 @@ function useAppState() {
   const [demoOpen, setDemoOpen] = useState(false)
   const nextId = useRef(1)
   const lastIntent = useRef<{ intent: Intent; withPhoto: boolean } | null>(null)
+  const mockServer = useRef(createMockSessionServer())
+  // 초기화 뒤에 도착한 세션 생성 응답을 버리기 위한 번호
+  const startSeq = useRef(0)
   // Handlers read the latest values through this ref so delayed replies
   // never act on a stale render's state.
   const live = useRef({ train, dest, here, failNext })
@@ -63,7 +84,39 @@ function useAppState() {
     live.current = { train, dest, here, failNext }
   })
 
-  const moveTo = (state: SessionState) => setSession((s) => ({ state, revision: s.revision + 1 }))
+  // 응답의 session을 그대로 반영한다. 늦게 도착한 옛 응답이 더 새 값을 덮지 않도록 revision이 작으면 버린다.
+  const applySession = (next: SessionStatus) => setSession((cur) => (cur && next.revision < cur.revision ? cur : next))
+
+  // mock 모드에서만 가짜 서버가 상태를 바꾼다. http 모드의 위치·경로 흐름은 아직 서버에 알리지 않으므로
+  // (작업 3, 4) 세션도 바꾸지 않는다.
+  const mockMove = (state: SessionState) => {
+    if (API_MODE === 'mock') applySession(mockServer.current.advance(state))
+  }
+
+  // 시작 화면의 "시작하기". http 모드는 POST /sessions로 세션을 만든 뒤 채팅으로 넘어간다.
+  const startSession = async () => {
+    if (API_MODE === 'mock') {
+      setSession(mockServer.current.start())
+      return setScreen('chat')
+    }
+    const seq = ++startSeq.current
+    setStarting({ pending: true, error: null })
+    try {
+      const out = await createSession({
+        language: lang,
+        map_id: MAP_ID,
+        client: { platform: 'web', app_version: __APP_VERSION__, ar_capable: false },
+      })
+      if (seq !== startSeq.current) return
+      setSessionInfo({ id: out.session_id, mapId: out.map_id, mapVersion: out.map_version })
+      setSession(out.session)
+      setLang(out.language)
+      setStarting({ pending: false, error: null })
+      setScreen('chat')
+    } catch (error) {
+      if (seq === startSeq.current) setStarting({ pending: false, error: toErrorView(error) })
+    }
+  }
 
   const push = (m: Omit<Msg, 'id'>) => {
     const id = nextId.current++
@@ -84,7 +137,7 @@ function useAppState() {
   const chooseDestination = (poi: PoiId, tip: Tip | null = null) => {
     const { here } = live.current
     setDest(poi)
-    moveTo(here ? 'ready_to_navigate' : 'needs_location')
+    mockMove(here ? 'ready_to_navigate' : 'needs_location')
     reply({ kind: 'destSet', poi, from: here, tip })
   }
 
@@ -93,10 +146,10 @@ function useAppState() {
     const { train, here } = live.current
     switch (intent) {
       case 'airport':
-        moveTo('needs_clarification')
+        mockMove('needs_clarification')
         return reply({ kind: 'trainTypes' })
       case 'notSure':
-        moveTo('needs_clarification')
+        mockMove('needs_clarification')
         return reply({ kind: 'notSure' })
       case 'express':
         setTrain('express')
@@ -104,7 +157,7 @@ function useAppState() {
       // All-stop needs one more answer: the route depends on whether they already have a transit card.
       case 'allstop':
         setTrain('allstop')
-        moveTo('needs_clarification')
+        mockMove('needs_clarification')
         return reply({ kind: 'askCard' })
       case 'hasCard':
         setTrain('allstop')
@@ -124,19 +177,19 @@ function useAppState() {
         return reply({ kind: 'fare' })
       case 'buy':
         if (!train) {
-          moveTo('needs_clarification')
+          mockMove('needs_clarification')
           return reply({ kind: 'trainTypes' })
         }
         return reply({ kind: 'buy', train, withPhoto })
       case 'platform':
         if (!train) {
-          moveTo('needs_clarification')
+          mockMove('needs_clarification')
           return reply({ kind: 'trainTypes' })
         }
         return chooseDestination(train === 'express' ? 'expressPlatform' : 'allstopPlatform')
       case 'lost':
         setHere(null)
-        moveTo('needs_location')
+        mockMove('needs_location')
         return reply({ kind: 'lost' })
       case 'pickList':
         return setScreen('destinations')
@@ -174,7 +227,7 @@ function useAppState() {
     setStartNode(from)
     setSteps(route ?? [])
     setStepIdx(0)
-    moveTo(route ? 'navigating' : 'ready_to_navigate')
+    mockMove(route ? 'navigating' : 'ready_to_navigate')
     setScreen('route')
   }
 
@@ -184,7 +237,7 @@ function useAppState() {
     setTimeout(() => {
       const found = SCENARIOS[p.scenario]
       setCandidates(found)
-      if (found.length) moveTo('needs_confirmation')
+      if (found.length) mockMove('needs_confirmation')
       setScreen('candidates')
     }, VISION_DELAY_MS)
   }
@@ -192,7 +245,7 @@ function useAppState() {
   // Location is confirmed only by an explicit user choice, never by the top candidate alone.
   const confirmLocation = (node: NodeId) => {
     setHere(node)
-    moveTo('ready_to_navigate')
+    mockMove('ready_to_navigate')
     if (live.current.dest) startRoute(node)
     else setScreen('chat')
   }
@@ -202,7 +255,7 @@ function useAppState() {
     const arrivedAt = steps.length ? steps[steps.length - 1].edge.to : startNode
     setStepIdx(steps.length)
     setHere(arrivedAt)
-    moveTo('arrived')
+    mockMove('arrived')
     setScreen('arrived')
   }
 
@@ -213,7 +266,12 @@ function useAppState() {
   }
 
   const reset = () => {
-    setSession({ state: 'idle', revision: 1 })
+    startSeq.current++
+    // 다음 "시작하기"에서 새 세션을 만든다. 서버 세션은 2시간 동안 요청이 없으면 만료된다.
+    if (API_MODE === 'http') clearSession()
+    setSession(null)
+    setSessionInfo(null)
+    setStarting({ pending: false, error: null })
     setTrain(null)
     setDest(null)
     setHere(null)
@@ -228,8 +286,13 @@ function useAppState() {
     setScreen('welcome')
   }
 
+  // 경로 화면으로 돌아갈 수 있는지. http 모드의 경로는 아직 서버와 연결되지 않아서(작업 4)
+  // 서버 상태 대신 화면에 진행 중인 경로가 있는지로 판단한다.
+  const routeActive = API_MODE === 'mock' ? session?.state === 'navigating' : here !== null && stepIdx < steps.length
+
   return {
-    lang, setLang, screen, setScreen, session, train, dest, here, steps, startNode, stepIdx, messages, photo, candidates,
+    lang, setLang, screen, setScreen, session, sessionInfo, applySession, starting, startSession, routeActive,
+    train, dest, here, steps, startNode, stepIdx, messages, photo, candidates,
     failNext, setFailNext, uploadScenario, setUploadScenario, demoOpen, setDemoOpen,
     sendText, sendChip, retry, pickDestination, startRoute, analyzePhoto, confirmLocation, nextStep, reportLost, reset,
   }

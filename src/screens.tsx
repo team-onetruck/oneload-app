@@ -4,6 +4,7 @@ import {
   AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Banknote, BookOpen, Camera, Check, ChevronRight, Footprints,
   ImagePlus, List, MessageCircle, Navigation, RefreshCw, Rotate3d, Route, ScanLine, Star, Ticket, X,
 } from 'lucide-react'
+import { API_MODE } from './api/mode'
 import { render } from './assistant'
 import type { Action, Rendered } from './assistant'
 import { NODES, POIS, TRAIN_NAME } from './data'
@@ -70,7 +71,7 @@ function LineMark({ size = 22 }: { size?: number }) {
 /* ---------- Welcome ---------- */
 
 export function Welcome() {
-  const { lang, setLang, setScreen } = useApp()
+  const { lang, setLang, starting, startSession } = useApp()
   return (
     <main className="screen welcome">
       <div className="welcome-line" aria-hidden>
@@ -104,8 +105,23 @@ export function Welcome() {
             </button>
           ))}
         </div>
-        <button className="btn primary block" onClick={() => setScreen('chat')}>
-          {UI.start[lang]} <ArrowRight size={20} />
+        {starting.error && (
+          <p className="start-error" role="alert">
+            <AlertTriangle size={16} /> {UI.startFailed[lang]}
+          </p>
+        )}
+        <button className="btn primary block" onClick={startSession} disabled={starting.pending} aria-busy={starting.pending}>
+          {starting.pending ? (
+            UI.connecting[lang]
+          ) : starting.error ? (
+            <>
+              <RefreshCw size={18} /> {UI.retry[lang]}
+            </>
+          ) : (
+            <>
+              {UI.start[lang]} <ArrowRight size={20} />
+            </>
+          )}
         </button>
         <p className="demo-note">{UI.demoNote[lang]}</p>
       </div>
@@ -222,7 +238,7 @@ function AssistantMsg({ m, latest }: { m: Msg; latest: boolean }) {
 
 export function Chat() {
   const app = useApp()
-  const { lang, messages, session, dest } = app
+  const { lang, messages, dest } = app
   const [text, setText] = useState('')
   const [image, setImage] = useState<string | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
@@ -231,7 +247,7 @@ export function Chat() {
   }, [messages])
   const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
   const busy = messages.some((m) => m.pending)
-  const navigating = session.state === 'navigating' && dest
+  const navigating = app.routeActive && dest
 
   const submit = () => {
     if (busy || (!text.trim() && !image)) return
@@ -336,7 +352,7 @@ export function Locate() {
   const { lang } = app
   return (
     <main className="screen locate">
-      <TopBar onBack={() => app.setScreen(app.session.state === 'navigating' ? 'route' : 'chat')} title={UI.locateTitle[lang]} />
+      <TopBar onBack={() => app.setScreen(app.routeActive ? 'route' : 'chat')} title={UI.locateTitle[lang]} />
       <div className="viewfinder">
         <span className="corner tl" />
         <span className="corner tr" />
@@ -742,11 +758,12 @@ export function DemoPanel() {
               </button>
             </div>
             <p className="label">
-              {UI.sessionState[lang]} · rev {session.revision}
+              {UI.sessionState[lang]} · rev {session?.revision ?? '–'} · {API_MODE}
+              {app.sessionInfo && ` · ${app.sessionInfo.id}`}
             </p>
             <ol className="state-line">
               {STATES.map((s) => (
-                <li key={s} className={s === session.state ? 'on' : ''}>
+                <li key={s} className={s === session?.state ? 'on' : ''}>
                   <span />
                   <code>{s}</code>
                 </li>
