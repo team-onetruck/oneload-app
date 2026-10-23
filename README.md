@@ -72,12 +72,12 @@ pnpm verify   # 헤더 검사 + oxlint + 타입체크 + vitest. 커밋 전에 �
 pnpm e2e      # Playwright(pnpm test:e2e). 개발 서버를 mock(4179)·http(4180) 모드로 하나씩 띄운다. 처음 한 번 pnpm exec playwright install chromium
 ```
 
-E2E는 9개이고 `playwright.config.ts`의 두 프로젝트로 나뉜다.
+E2E는 11개이고 `playwright.config.ts`의 두 프로젝트로 나뉜다.
 
 | 프로젝트 | 개발 서버 | 테스트 |
 | --- | --- | --- |
-| `mock` | `VITE_API_MODE=mock`, 4179 | `e2e/smoke.spec.ts` 1개, `e2e/mock/` 기준선 5개 |
-| `http` | `VITE_API_MODE=http`, 4180 | `e2e/scenarios/` 3개. `/api/v1`은 `page.route`로 가로채 MSW 핸들러가 답한다 |
+| `mock` | `VITE_API_MODE=mock`, 4179 | `e2e/smoke.spec.ts` 2개(시작 화면, Demo 라벨), `e2e/mock/` 기준선 5개 |
+| `http` | `VITE_API_MODE=http`, 4180 | `e2e/scenarios/` 4개(시나리오 3, Live 라벨 1). `/api/v1`은 `page.route`로 가로채 MSW 핸들러가 답한다 |
 
 두 명령 모두 서버 없이 돈다. vitest는 가짜 fetch와 MSW 핸들러로 백엔드 계약을 흉내 낸다. Playwright 스모크는 mock 모드에서 시작 화면이 뜨는지 보고,
 시나리오 3개(직통열차, 일반열차+카드 없음, 사진 503 → 직접 선택)는 http 모드에서 `/api/v1`을 가로채 같은 MSW 핸들러가 답하게 해 화면 흐름과 요청 순서를 본다(`e2e/support/mockApi.ts`).
@@ -95,6 +95,7 @@ pnpm build && rsync -a --delete dist/ macserver:~/hangil-demo/dist/
 ## Demo controls
 
 The **Demo** pill (top of the desktop frame; on phones open the URL with `?demo` to get a slim tab on the right edge) opens the demo panel.
+라벨은 모드를 따른다(`src/i18n.ts`의 `modeCopy`): mock 모드는 상단 필 **Demo**(데모), 패널 제목 *Demo controls*(데모 설정), 시작 화면의 "Prototype…" 문구이고, http 모드는 **Live**(실서버), *Dev controls*(개발자 설정), "Connected to the Hangil server…"(한길 서버에 연결돼 있어요…) 문구다.
 패널에 보이는 항목과 동작은 모드마다 다르다 (`src/screens.tsx`의 `DemoPanel`, `src/api/index.ts`의 `demoMode`).
 
 | 항목 | mock 모드 | http 모드 |

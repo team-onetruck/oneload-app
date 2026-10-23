@@ -4,7 +4,7 @@ import {
   AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpDown, Banknote, BookOpen, Camera, Check, ChevronRight, Footprints,
   ImagePlus, List, MessageCircle, Navigation, RefreshCw, Rotate3d, RotateCcw, Route, ScanLine, Star, Ticket, TimerOff, X,
 } from 'lucide-react'
-import { apiMode } from './api'
+import { apiMode, demoMode } from './api'
 import { render } from './assistant'
 import type { Rendered } from './assistant'
 import { TRAIN_NAME } from './data'
@@ -14,7 +14,7 @@ import type { PlaceView } from './features/localization/views'
 import { remainingDistanceM } from './features/route/toSteps'
 import { useRecovery } from './features/recovery/context'
 import type { NoticeReason, Recovery, RecoveryAction, RelocateReason, SessionEndCause } from './features/recovery/recovery'
-import { UI } from './i18n'
+import { UI, modeCopy } from './i18n'
 import { useApp } from './store'
 import type { Attachment, Msg, SessionState } from './store'
 
@@ -24,6 +24,9 @@ const loadStreetView = () => import('./streetview')
 const StreetView = lazy(() => loadStreetView().then((m) => ({ default: m.StreetView })))
 
 const WALK_M_PER_MIN = 70
+
+// 상단 필·설정 패널·시작 화면 문구는 모드를 따른다. mock은 "Demo", http(실서버 연결)는 "Live"
+const MODE = modeCopy(demoMode)
 
 // 세션이 있으면 서버 언어도 바꾼다 (store.changeLang). 바꾸는 중에는 다시 누르지 못하게 잠근다
 function LangToggle({ onDark = false }: { onDark?: boolean }) {
@@ -132,7 +135,7 @@ export function Welcome() {
             </>
           )}
         </button>
-        <p className="demo-note">{UI.demoNote[lang]}</p>
+        <p className="demo-note">{MODE.note[lang]}</p>
       </div>
     </main>
   )
@@ -1009,13 +1012,13 @@ export function DemoPanel() {
   return (
     <>
       <button className={`demo-pill ${new URLSearchParams(location.search).has('demo') ? '' : 'opt-in'}`} onClick={() => app.setDemoOpen(true)}>
-        {UI.demo[lang]}
+        {MODE.pill[lang]}
       </button>
       {app.demoOpen && (
         <div className="sheet-backdrop" onClick={() => app.setDemoOpen(false)}>
-          <section className="sheet" role="dialog" aria-label={UI.demoPanel[lang]} onClick={(e) => e.stopPropagation()}>
+          <section className="sheet" role="dialog" aria-label={MODE.panel[lang]} onClick={(e) => e.stopPropagation()}>
             <div className="sheet-head">
-              <h2>{UI.demoPanel[lang]}</h2>
+              <h2>{MODE.panel[lang]}</h2>
               <button className="icon-btn" onClick={() => app.setDemoOpen(false)} aria-label={UI.close[lang]}>
                 <X size={22} />
               </button>
