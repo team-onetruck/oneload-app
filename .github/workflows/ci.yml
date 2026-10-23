@@ -97,10 +97,35 @@ jobs:
       - if: steps.e2e-script.outputs.present == 'true'
         run: pnpm install --frozen-lockfile
 
-      # 러너에는 Playwright 브라우저와 그 시스템 라이브러리가 없다. @playwright/test 버전에 맞는 chromium만 받는다.
-      - name: Playwright chromium 설치
+      # 브라우저(~/.cache/ms-playwright)는 설치된 @playwright/test 버전으로 캐시한다. 버전이 같으면 받는 chromium도 같다.
+      - name: Playwright 버전 확인
         if: steps.e2e-script.outputs.present == 'true'
+        id: playwright
+        run: |
+          version="$(pnpm exec playwright --version | awk '{print $2}')"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Playwright 브라우저 캐시
+        if: steps.e2e-script.outputs.present == 'true'
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright.outputs.version }}
+
+      # 캐시가 없으면 @playwright/test 버전에 맞는 chromium과 시스템 라이브러리를 함께 받는다.
+      - name: Playwright chromium 설치
+        if: steps.e2e-script.outputs.present == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
+
+      # 캐시가 있으면 브라우저는 확인만 하고 시스템 라이브러리(apt) 설치는 건너뛴다. apt 미러가 느리면 이 단계가 몇 분씩 걸렸다.
+      # chromium 실행에 필요한 라이브러리는 러너 이미지에 이미 있고, install-deps가 더하는 것은 폰트와 업그레이드뿐이다
+      # (CJK 폰트가 없어 실패 트레이스 스크린샷의 한국어는 네모로 보인다. e2e에는 스크린샷 비교가 없다).
+      # 러너 이미지가 바뀌어 브라우저 실행이 missing dependencies로 실패하면 이 단계에 install-deps를 되살리거나 캐시 키를 바꿀 것.
+      - name: Playwright chromium 확인 (캐시 사용, 시스템 라이브러리 설치 생략)
+        if: steps.e2e-script.outputs.present == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install chromium
 
       - if: steps.e2e-script.outputs.present == 'true'
         run: pnpm test:e2e
