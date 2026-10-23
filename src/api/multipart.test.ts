@@ -63,8 +63,10 @@ describe('boundaryFor', () => {
     expect(boundaryFor(crypto.randomUUID())).not.toBe(boundaryFor(key))
   })
 
-  it('Content-Type에 따옴표 없이 쓸 수 없는 문자는 _로 바꾸고 70자를 넘기지 않는다', () => {
-    expect(boundaryFor('a b"c;d:e/f=g?h(i)j,k')).toBe('oneload-a_b_c_d_e_f_g_h_i_j_k')
+  it('영숫자와 하이픈 밖의 문자는 지우고 70자를 넘기지 않는다', () => {
+    expect(boundaryFor(`a b"c;d:e/f=g?h(i)j,k_l.m+n'o-p`)).toBe('oneload-abcdefghijklmno-p')
+    expect(boundaryFor('한글 키')).toBe('oneload-')
     expect(boundaryFor('x'.repeat(64))).toHaveLength(70)
+    for (const key of ['a b"c', '한글 키', 'x'.repeat(64), crypto.randomUUID()]) expect(boundaryFor(key)).toMatch(/^[0-9A-Za-z-]{1,70}$/)
   })
 })

@@ -4,13 +4,14 @@
  * Purpose: FormData를 정한 경계값으로 직접 multipart 본문으로 만든다. 같은 Idempotency-Key로 재시도하면 같은 바이트가 나가게 한다
  */
 
-// 경계값(RFC 2046)이면서 Content-Type 헤더에 따옴표 없이 쓸 수 있는 문자만 남기고 나머지는 _로 바꾼다. 길이는 70자까지다.
-const BOUNDARY_UNSAFE = /[^0-9A-Za-z'+_\-.]/g
+// 경계값(RFC 2046)에는 영숫자와 하이픈만 남기고 나머지 문자는 지운다. 길이는 70자까지다.
+// 이 문자들은 Content-Type 헤더에서도 따옴표 없이 쓸 수 있다.
+const BOUNDARY_UNSAFE = /[^0-9A-Za-z-]/g
 const MAX_BOUNDARY_LENGTH = 70
 
 // 서버 지문은 경로 + Authorization + 본문 바이트라서(backend/app/middleware.py) 경계값도 재시도마다 같아야 한다.
 export function boundaryFor(idempotencyKey: string): string {
-  return `oneload-${idempotencyKey.replace(BOUNDARY_UNSAFE, '_')}`.slice(0, MAX_BOUNDARY_LENGTH)
+  return `oneload-${idempotencyKey.replace(BOUNDARY_UNSAFE, '')}`.slice(0, MAX_BOUNDARY_LENGTH)
 }
 
 // 아래 규칙은 fetch가 FormData를 직렬화하는 방식(HTML 표준 multipart/form-data encoding)과 같다.
