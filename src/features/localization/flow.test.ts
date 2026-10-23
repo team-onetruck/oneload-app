@@ -6,7 +6,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createApiClient } from '../../api/client'
 import type { FetchLike } from '../../api/client'
-import { losingFirstResponse } from '../../api/fakeFetch'
+import { losingFirstResponse, unansweredFirst } from '../../api/fakeFetch'
 import { createHttpAdapter } from '../../api/httpAdapter'
 import type { ConfirmationOut, LocalizationOut, NavigationStateOut } from '../../api'
 import { recoveryFor } from '../recovery/recovery'
@@ -160,8 +160,8 @@ describe('오류 복구', () => {
   })
 
   it('타임아웃 뒤 다시 시도하면 처음 요청과 같은 Idempotency-Key로 보낸다', async () => {
-    const { api, sessionId, revision, confirmKeys } = await start({ timeoutMs: 50 })
-    mockBackend.hang('confirmations')
+    // 첫 확정 요청은 서버에 닿지 않고 응답도 없다. mockBackend.hang을 쓰면 끊긴 연결 뒤 새 연결이 가끔 MSW를 빠져나간다 (fakeFetch.ts)
+    const { api, sessionId, revision, confirmKeys } = await start({ timeoutMs: 50, fetch: unansweredFirst('/location-confirmations') })
     const confirm = hooks<ConfirmationOut>()
     await sendConfirmation({ api, sessionId, choice: { method: 'manual', nodeId: 'ktx-hall' }, revision, hooks: confirm.h })
 
