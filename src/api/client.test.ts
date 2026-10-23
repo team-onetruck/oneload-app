@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApiClient, SESSION_STORAGE_KEY } from './client'
 import type { FetchLike, TokenStorage } from './client'
 import { ApiError, isAiServiceUnavailable, isRevisionConflict } from './errors'
+import { readMultipart } from './fakeFetch'
 
 interface Call {
   url: string
@@ -82,15 +83,18 @@ describe('요청 헤더', () => {
     expect(calls.map((c) => c.headers.get('Authorization'))).toEqual(['Bearer tok_1', 'Bearer tok_1'])
   })
 
-  it('JSON 본문에는 Content-Type을 붙이고, FormData는 fetch가 경계값을 정하도록 비워 둔다', async () => {
+  it('JSON 본문에는 Content-Type을 붙이고, FormData는 키로 정한 경계값의 multipart로 직접 직렬화한다', async () => {
     const { fetch, calls } = fakeFetch(json(200, {}), json(200, {}))
     const client = createApiClient({ baseUrl: BASE, fetch, storage: null })
     await client.request('/a', { method: 'POST', json: { message: '안녕' } })
-    await client.request('/b', { method: 'POST', form: new FormData() })
+    const form = new FormData()
+    form.append('map_version', 'v1')
+    await client.request('/b', { method: 'POST', form, idempotencyKey: 'key-1' })
     expect(calls[0].headers.get('Content-Type')).toBe('application/json')
     expect(calls[0].init.body).toBe('{"message":"안녕"}')
-    expect(calls[1].headers.has('Content-Type')).toBe(false)
-    expect(calls[1].init.body).toBeInstanceOf(FormData)
+    expect(calls[1].headers.get('Content-Type')).toBe('multipart/form-data; boundary=oneload-key-1')
+    expect(calls[1].init.body).toBeInstanceOf(Blob)
+    expect((await readMultipart(calls[1].init)).get('map_version')).toBe('v1')
   })
 })
 

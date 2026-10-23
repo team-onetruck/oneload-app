@@ -31,6 +31,12 @@ export function errorResponse(status: number, code: ServerErrorCode, details: Re
   })
 }
 
+// 보낸 multipart 본문을 서버처럼 다시 읽는다. 본문은 경계값을 정해 직접 만든 Blob이다 (src/api/multipart.ts)
+export function readMultipart(init: RequestInit): Promise<FormData> {
+  const contentType = new Headers(init.headers).get('Content-Type') ?? ''
+  return new Response(init.body, { headers: { 'Content-Type': contentType } }).formData()
+}
+
 export function fakeFetch(replies: FakeReply[]) {
   const queue = [...replies]
   const calls: RecordedCall[] = []
