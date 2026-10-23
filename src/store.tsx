@@ -4,7 +4,7 @@
 // 세션 생성과 채팅은 VITE_API_MODE(기본 http)에 따라 서버 또는 mock 규칙(가짜 세션 서버, assistant.ts)을 쓴다.
 import { createContext, useContext, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { clearSession, createSession, getNavigationState, sendMessage } from './api'
+import { clearSession, createSession, getNavigationState, patchSession, sendMessage } from './api'
 import type { SessionStatus } from './api'
 import { API_MODE } from './api/mode'
 import { classify } from './assistant'
@@ -18,6 +18,8 @@ import type { ChatChip, ChatView, ErrorView } from './features/chat/toViewModel'
 import { compressImage } from './features/localization/compressImage'
 import { useRecovery } from './features/recovery/context'
 import type { FailHandlers } from './features/recovery/context'
+import { sendWithRecovery } from './features/recovery/retry'
+import { patchLanguage } from './features/session/language'
 import { createMockSessionServer } from './features/session/mockSession'
 import { serverPoiOf } from './features/session/poiBridge'
 import { findRoute } from './route'
@@ -76,6 +78,7 @@ const AI_DELAY_MS = 900
 const VISION_DELAY_MS = 1600
 const MAP_ID = 'seoul-station'
 const chatApi = { sendMessage, getNavigationState }
+const sessionApi = { patchSession, getNavigationState }
 
 function useAppState() {
   const [lang, setLang] = useState<Lang>('en')
@@ -84,6 +87,8 @@ function useAppState() {
   const [session, setSession] = useState<SessionStatus | null>(null)
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null)
   const [starting, setStarting] = useState<{ pending: boolean; error: ErrorView | null }>({ pending: false, error: null })
+  // 언어 PATCH를 보내는 중이면 언어 버튼을 잠근다
+  const [langPending, setLangPending] = useState(false)
   const [train, setTrain] = useState<TrainType | null>(null)
   const [dest, setDest] = useState<PoiId | null>(null)
   // 서버가 정한 목적지 POI id. dest는 데모 경로용으로 이어 붙인 값이다 (poiBridge)
@@ -109,9 +114,10 @@ function useAppState() {
   // never act on a stale render's state.
   const sessionId = sessionInfo?.id ?? null
   const hasRoute = steps.length > 0
-  const live = useRef({ train, dest, here, failNext, lang, sessionId, hasRoute })
+  const revision = session?.revision ?? 0
+  const live = useRef({ train, dest, here, failNext, lang, sessionId, hasRoute, revision })
   useLayoutEffect(() => {
-    live.current = { train, dest, here, failNext, lang, sessionId, hasRoute }
+    live.current = { train, dest, here, failNext, lang, sessionId, hasRoute, revision }
   })
 
   // 응답의 session을 그대로 반영한다. 늦게 도착한 옛 응답이 더 새 값을 덮지 않도록 revision이 작으면 버린다.
@@ -146,6 +152,48 @@ function useAppState() {
     } catch (error) {
       if (seq === startSeq.current) setStarting({ pending: false, error: toErrorView(error) })
     }
+  }
+
+  // 언어 바꾸기. 세션 전(시작 화면)과 mock 모드는 화면 언어만 바꾼다.
+  // http 세션은 PATCH /sessions/{id}(409면 navigation-state로 맞춰 한 번 재시도)로 서버 언어를 바꾸고 응답의 language·session을 쓴다.
+  const changeLang = (next: Lang) => {
+    const { sessionId: sid, lang: prev } = live.current
+    if (API_MODE === 'mock' || !sid || next === prev) return setLang(next)
+    const current = () => live.current.sessionId === sid
+    // 누르는 즉시 바꿔 보여 주고, 실패하면 원래 언어로 되돌린다
+    const begin = () => {
+      setLang(next)
+      setLangPending(true)
+    }
+    begin()
+    void sendWithRecovery(
+      (options) =>
+        patchLanguage(
+          { api: sessionApi, sessionId: sid, language: next, revision: live.current.revision, onResync: (state) => current() && applySession(state.session) },
+          options,
+        ),
+      {
+        onSuccess: (out) => {
+          setLangPending(false)
+          if (!current()) return
+          setLang(out.language)
+          applySession(out.session)
+        },
+        fail: (error, handlers = {}) => {
+          setLangPending(false)
+          if (!current()) return
+          setLang(prev)
+          const { retry } = handlers
+          recovery.fail(error, {
+            ...handlers,
+            retry: retry && (() => {
+              begin()
+              retry()
+            }),
+          })
+        },
+      },
+    )
   }
 
   const push = (m: Omit<Msg, 'id'>) => {
@@ -403,7 +451,7 @@ function useAppState() {
   const routeActive = API_MODE === 'mock' ? session?.state === 'navigating' : here !== null && stepIdx < steps.length
 
   return {
-    lang, setLang, screen, setScreen, session, sessionInfo, applySession, starting, startSession, routeActive,
+    lang, setLang, changeLang, langPending, screen, setScreen, session, sessionInfo, applySession, starting, startSession, routeActive,
     train, dest, destinationPoiId, here, steps, startNode, stepIdx, messages, photo, candidates,
     failNext, setFailNext, uploadScenario, setUploadScenario, demoOpen, setDemoOpen,
     sendText, sendChip, sendSuggested, retry, pickDestination, startRoute, analyzePhoto, confirmLocation, nextStep, reportLost, reset,

@@ -24,12 +24,13 @@ const StreetView = lazy(() => loadStreetView().then((m) => ({ default: m.StreetV
 
 const WALK_M_PER_MIN = 70
 
+// 세션이 있으면 서버 언어도 바꾼다 (store.changeLang). 바꾸는 중에는 다시 누르지 못하게 잠근다
 function LangToggle({ onDark = false }: { onDark?: boolean }) {
-  const { lang, setLang } = useApp()
+  const { lang, changeLang, langPending } = useApp()
   return (
-    <div className={`lang ${onDark ? 'on-dark' : ''}`} role="group" aria-label="Language">
+    <div className={`lang ${onDark ? 'on-dark' : ''}`} role="group" aria-label="Language" aria-busy={langPending}>
       {(['en', 'ko'] as Lang[]).map((l) => (
-        <button key={l} aria-pressed={lang === l} onClick={() => setLang(l)}>
+        <button key={l} aria-pressed={lang === l} disabled={langPending} onClick={() => changeLang(l)}>
           {l === 'en' ? 'EN' : '한'}
         </button>
       ))}
