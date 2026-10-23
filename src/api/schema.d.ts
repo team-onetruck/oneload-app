@@ -192,7 +192,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * 대화 기록 조회
+         * @description 앱을 다시 열거나 연결이 끊겼다 돌아왔을 때 화면을 복구합니다. 최근 메시지를 오래된 순서로 돌려주며, 한길의 답변은 보냈을 때와 같은 모양(`reply`: 목록·tip·확인되지 않음·출처·추천 답변)으로 들어 있습니다. 길안내 진행 상태는 `navigation-state`로 함께 복구하세요.
+         */
+        get: operations["list_messages_api_v1_sessions__session_id__messages_get"];
         put?: never;
         /**
          * 메시지 보내기 (핵심 진입점)
@@ -271,6 +275,50 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AgentResponse */
+        AgentResponse: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "answered" | "needs_clarification" | "destination_set" | "relocalize" | "cannot_answer" | "out_of_scope";
+            /**
+             * Intent
+             * @enum {string}
+             */
+            intent: "navigate_to_poi" | "ticket_purchase_and_navigation" | "payment_question" | "usage_question" | "report_off_route" | "out_of_scope";
+            /** Assistant Message */
+            assistant_message: string;
+            /**
+             * Items
+             * @default []
+             */
+            items: string[];
+            /** Tip */
+            tip?: string | null;
+            /**
+             * Unverified Notes
+             * @default []
+             */
+            unverified_notes: string[];
+            slots: components["schemas"]["Slots"];
+            destination?: components["schemas"]["Destination"] | null;
+            /**
+             * Suggested Replies
+             * @default []
+             */
+            suggested_replies: components["schemas"]["SuggestedReply"][];
+            /**
+             * Sources
+             * @default []
+             */
+            sources: components["schemas"]["Source"][];
+            /**
+             * Next Action
+             * @enum {string}
+             */
+            next_action: "reply" | "locate" | "confirm_location" | "navigate" | "recapture" | "none";
+        };
         /** Body_localize_api_v1_sessions__session_id__localizations_post */
         Body_localize_api_v1_sessions__session_id__localizations_post: {
             /**
@@ -308,6 +356,36 @@ export interface components {
             landmark_id: string;
             /** Evidence */
             evidence: string[];
+        };
+        /** ChatMessage */
+        ChatMessage: {
+            /** Message Id */
+            message_id: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Text */
+            text: string;
+            /**
+             * Selected Poi Id
+             * @description 사용자가 버튼·목록으로 고른 목적지 (user)
+             */
+            selected_poi_id?: string | null;
+            /**
+             * Has Image
+             * @description 사진을 붙여 보냈는지 (user). 사진 자체는 저장하지 않습니다
+             * @default false
+             */
+            has_image: boolean;
+            /** @description 보냈을 때와 같은 답변 전체 (assistant) */
+            reply?: components["schemas"]["AgentResponse"] | null;
         };
         /** ClientInfo */
         ClientInfo: {
@@ -612,6 +690,12 @@ export interface components {
             next_action: "reply" | "locate" | "confirm_location" | "navigate" | "recapture" | "none";
             /** Message Id */
             message_id: string;
+            session: components["schemas"]["SessionStatus"];
+        };
+        /** MessagesOut */
+        MessagesOut: {
+            /** Messages */
+            messages: components["schemas"]["ChatMessage"][];
             session: components["schemas"]["SessionStatus"];
         };
         /** NavigationEvent */
@@ -965,7 +1049,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 요청마다 새 UUID. 같은 키와 같은 본문으로 다시 보내면 저장된 응답을 돌려줍니다. */
+                /** @description 요청마다 새 UUID. 같은 키와 같은 본문으로 다시 보내면 저장된 응답을 돌려주고, 첫 요청이 아직 처리 중이면 409 REQUEST_IN_PROGRESS(Retry-After: 1)를 돌려줍니다. */
                 "Idempotency-Key": string;
             };
             path?: never;
@@ -1067,7 +1151,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 요청마다 새 UUID. 같은 키와 같은 본문으로 다시 보내면 저장된 응답을 돌려줍니다. */
+                /** @description 요청마다 새 UUID. 같은 키와 같은 본문으로 다시 보내면 저장된 응답을 돌려주고, 첫 요청이 아직 처리 중이면 409 REQUEST_IN_PROGRESS(Retry-After: 1)를 돌려줍니다. */
                 "Idempotency-Key": string;
             };
             path: {
@@ -1105,7 +1189,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 요청마다 새 UUID. 같은 키와 같은 본문으로 다시 보내면 저장된 응답을 돌려줍니다. */
+                /** @description 요청마다 새 UUID. 같은 키와 같은 본문으로 다시 보내면 저장된 응답을 돌려주고, 첫 요청이 아직 처리 중이면 409 REQUEST_IN_PROGRESS(Retry-After: 1)를 돌려줍니다. */
                 "Idempotency-Key": string;
             };
             path: {
@@ -1224,11 +1308,45 @@ export interface operations {
             };
         };
     };
+    list_messages_api_v1_sessions__session_id__messages_get: {
+        parameters: {
+            query?: {
+                /** @description 최근 몇 개를 받을지 */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 성공 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessagesOut"];
+                };
+            };
+            /** @description 입력 형식 오류 (code: INVALID_INPUT) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     send_message_api_v1_sessions__session_id__messages_post: {
         parameters: {
             query?: never;
             header: {
-                /** @description 요청마다 새 UUID. 같은 키와 같은 본문으로 다시 보내면 저장된 응답을 돌려줍니다. */
+                /** @description 요청마다 새 UUID. 같은 키와 같은 본문으로 다시 보내면 저장된 응답을 돌려주고, 첫 요청이 아직 처리 중이면 409 REQUEST_IN_PROGRESS(Retry-After: 1)를 돌려줍니다. */
                 "Idempotency-Key": string;
             };
             path: {
@@ -1308,7 +1426,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 요청마다 새 UUID. 같은 키와 같은 본문으로 다시 보내면 저장된 응답을 돌려줍니다. */
+                /** @description 요청마다 새 UUID. 같은 키와 같은 본문으로 다시 보내면 저장된 응답을 돌려주고, 첫 요청이 아직 처리 중이면 409 REQUEST_IN_PROGRESS(Retry-After: 1)를 돌려줍니다. */
                 "Idempotency-Key": string;
             };
             path: {
@@ -1346,7 +1464,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 요청마다 새 UUID. 같은 키와 같은 본문으로 다시 보내면 저장된 응답을 돌려줍니다. */
+                /** @description 요청마다 새 UUID. 같은 키와 같은 본문으로 다시 보내면 저장된 응답을 돌려주고, 첫 요청이 아직 처리 중이면 409 REQUEST_IN_PROGRESS(Retry-After: 1)를 돌려줍니다. */
                 "Idempotency-Key": string;
             };
             path: {
@@ -1384,7 +1502,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description 요청마다 새 UUID. 같은 키와 같은 본문으로 다시 보내면 저장된 응답을 돌려줍니다. */
+                /** @description 요청마다 새 UUID. 같은 키와 같은 본문으로 다시 보내면 저장된 응답을 돌려주고, 첫 요청이 아직 처리 중이면 409 REQUEST_IN_PROGRESS(Retry-After: 1)를 돌려줍니다. */
                 "Idempotency-Key": string;
             };
             path: {
