@@ -63,6 +63,24 @@ export const UI = {
   thanks: { en: 'Thanks! This helps us improve.', ko: '고마워요! 개선에 쓸게요.' },
   newTrip: { en: 'Start over', ko: '처음으로' },
 
+  // 세션 종료 화면. 만료 문구는 expired일 때만 쓴다
+  endedExpired: { en: 'Your session ended after a while without use', ko: '오래 사용하지 않아 세션이 끝났어요' },
+  endedUnauthorized: { en: 'We couldn’t verify your session', ko: '세션을 확인할 수 없어요' },
+  endedForbidden: { en: 'This session can’t continue', ko: '이 세션은 이어 갈 수 없어요' },
+  endedMapChanged: { en: 'The station map changed, so you need to start again', ko: '지도가 바뀌어 새로 시작해야 해요' },
+  endedLoss: { en: 'Your destination, confirmed location and route progress can’t be carried over. Starting again takes you back to choosing a language.', ko: '고른 목적지, 확인한 현재 위치, 길안내 진행 상황은 이어서 쓸 수 없어요. 다시 시작하면 언어 선택부터 새로 해요.' },
+  restart: { en: 'Start again', ko: '다시 시작' },
+
+  // 오류 알림. 무엇이 안 됐는지만 말하고, 할 수 있는 일은 버튼으로 준다
+  errTimeout: { en: 'Hangil didn’t get an answer in time.', ko: '제시간에 응답을 받지 못했어요.' },
+  errNetwork: { en: 'Couldn’t reach Hangil. Check your connection.', ko: '서버에 연결하지 못했어요. 인터넷 연결을 확인해 주세요.' },
+  errConflict: { en: 'Your trip changed while this was being sent, so it didn’t go through.', ko: '보내는 사이에 진행 상태가 바뀌어 요청을 마치지 못했어요.' },
+  errAiUnavailable: { en: 'Photo reading isn’t available right now. Choose your location on the list instead.', ko: '지금은 사진을 읽을 수 없어요. 목록에서 위치를 직접 골라 주세요.' },
+  errFailed: { en: 'That request couldn’t be completed.', ko: '요청을 처리하지 못했어요.' },
+  errResync: { en: 'That can’t be done at this step.', ko: '지금 단계에서는 할 수 없는 요청이에요.' },
+  errNeedLocation: { en: 'Confirm where you are first.', ko: '먼저 현재 위치를 확인해 주세요.' },
+  errPhotoExpired: { en: 'The photo result expired. Please take a new photo.', ko: '사진 결과가 만료됐어요. 다시 찍어 주세요.' },
+
   demo: { en: 'Demo', ko: '데모' },
   demoPanel: { en: 'Demo controls', ko: '데모 설정' },
   failNext: { en: 'Next AI request times out', ko: '다음 AI 요청 실패시키기' },
