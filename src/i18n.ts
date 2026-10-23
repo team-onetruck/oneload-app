@@ -2,7 +2,14 @@ import type { Text } from './data'
 
 export const UI = {
   tagline: { en: 'Not sure how tickets, cards and cash work here? Ask in your own words, then follow the line.', ko: '표·카드·현금 쓰는 법이 헷갈리면 편하게 물어보세요. 그다음 길을 따라가면 돼요.' },
-  chooseLang: { en: 'Choose your language', ko: '언어를 선택하세요' },
+  // 햄버거 메뉴. 언어는 여기서만 바꾼다 (시작 언어는 기기 언어)
+  menu: { en: 'Menu', ko: '메뉴' },
+  menuOpen: { en: 'Open menu', ko: '메뉴 열기' },
+  menuHome: { en: 'Go to start screen', ko: '처음 화면으로' },
+  menuLanguage: { en: 'Language', ko: '언어' },
+  homeConfirm: { en: 'Your chat and directions will end. Go back to the start screen?', ko: '대화와 길안내가 끝나요. 처음 화면으로 돌아갈까요?' },
+  homeConfirmYes: { en: 'Yes, go to start', ko: '네, 처음으로' },
+  cancel: { en: 'Cancel', ko: '취소' },
   start: { en: 'Start', ko: '시작하기' },
   connecting: { en: 'Connecting to Hangil…', ko: '한길에 연결하는 중…' },
   startFailed: { en: 'Couldn’t connect to Hangil. Check your connection and try again.', ko: '한길에 연결하지 못했어요. 연결을 확인하고 다시 시도해 주세요.' },
@@ -75,7 +82,7 @@ export const UI = {
   endedUnauthorized: { en: 'We couldn’t verify your session', ko: '세션을 확인할 수 없어요' },
   endedForbidden: { en: 'This session can’t continue', ko: '이 세션은 이어 갈 수 없어요' },
   endedMapChanged: { en: 'The station map changed, so you need to start again', ko: '지도가 바뀌어 새로 시작해야 해요' },
-  endedLoss: { en: 'Your destination, confirmed location and route progress can’t be carried over. Starting again takes you back to choosing a language.', ko: '고른 목적지, 확인한 현재 위치, 길안내 진행 상황은 이어서 쓸 수 없어요. 다시 시작하면 언어 선택부터 새로 해요.' },
+  endedLoss: { en: 'Your destination, confirmed location and route progress can’t be carried over. Starting again takes you back to the start screen.', ko: '고른 목적지, 확인한 현재 위치, 길안내 진행 상황은 이어서 쓸 수 없어요. 다시 시작하면 처음 화면부터 새로 해요.' },
   restart: { en: 'Start again', ko: '다시 시작' },
 
   // 오류 알림. 무엇이 안 됐는지만 말하고, 할 수 있는 일은 버튼으로 준다

@@ -35,6 +35,7 @@ import { useRecovery } from './features/recovery/context'
 import type { FailHandlers } from './features/recovery/context'
 import { sendWithRecovery } from './features/recovery/retry'
 import { patchLanguage } from './features/session/language'
+import { detectDeviceLang } from './features/session/languages'
 
 export type Screen = 'welcome' | 'chat' | 'locate' | 'analyzing' | 'candidates' | 'manual' | 'destinations' | 'route' | 'arrived'
 
@@ -96,8 +97,10 @@ const sessionApi = { patchSession, getNavigationState }
 const locationApi = { postLocalization, confirmLocation: confirmLocationApi, getNavigationState }
 const routeApi = { createRoute, postNavigationEvents, getNavigationState }
 function useAppState() {
-  const [lang, setLang] = useState<Lang>('en')
+  // 시작 언어는 기기 언어를 따른다. 이후에는 메뉴의 언어 설정(changeLang)으로만 바꾼다
+  const [lang, setLang] = useState<Lang>(() => detectDeviceLang())
   const [screen, setScreen] = useState<Screen>('welcome')
+  const [menuOpen, setMenuOpen] = useState(false)
   // state·revision은 서버(mock 모드에서는 mock 어댑터) 응답의 session 필드로만 바뀐다. 시작 전에는 null
   const [session, setSession] = useState<SessionStatus | null>(null)
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null)
@@ -619,6 +622,7 @@ function useAppState() {
     setConfirming(false)
     setFailNext(false)
     setDemoOpen(false)
+    setMenuOpen(false)
     // 세션 종료 화면의 '다시 시작', 오류 알림의 '처음으로', 데모 초기화가 모두 여기로 온다
     recovery.clear()
     setScreen('welcome')
@@ -649,7 +653,7 @@ function useAppState() {
   const demoPhotos = demoMode
 
   return {
-    lang, setLang, changeLang, langPending, screen, setScreen, session, sessionInfo, applySession, starting, startSession, routeActive,
+    lang, changeLang, langPending, menuOpen, setMenuOpen, screen, setScreen, session, sessionInfo, applySession, starting, startSession, routeActive,
     train, dest, here, guide, routing, routeError, arrivedPlace, atTickets, stepIdx, messages, photo,
     graph, ensureGraph, destinationList, candidateList, retakeHint, manualList, manualReason, confirming, demoPhotos,
     failNext, setFailNext, uploadScenario, setUploadScenario, demoOpen, setDemoOpen,

@@ -2,7 +2,7 @@ import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from 're
 import type { ReactNode } from 'react'
 import {
   AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpDown, Banknote, BookOpen, Camera, Check, ChevronRight, Footprints,
-  ImagePlus, List, MessageCircle, Navigation, RefreshCw, Rotate3d, RotateCcw, Route, ScanLine, Star, Ticket, TimerOff, X,
+  House as Home, ImagePlus, List, Menu as MenuIcon, MessageCircle, Navigation, RefreshCw, Rotate3d, RotateCcw, Route, ScanLine, Star, Ticket, TimerOff, X,
 } from 'lucide-react'
 import { apiMode, demoMode } from './api'
 import { render } from './assistant'
@@ -14,6 +14,7 @@ import type { PlaceView } from './features/localization/views'
 import { remainingDistanceM } from './features/route/toSteps'
 import { useRecovery } from './features/recovery/context'
 import type { NoticeReason, Recovery, RecoveryAction, RelocateReason, SessionEndCause } from './features/recovery/recovery'
+import { LANGUAGE_OPTIONS } from './features/session/languages'
 import { UI, modeCopy } from './i18n'
 import { useApp } from './store'
 import type { Attachment, Msg, SessionState } from './store'
@@ -28,16 +29,80 @@ const WALK_M_PER_MIN = 70
 // 상단 필·설정 패널·시작 화면 문구는 모드를 따른다. mock은 "Demo", http(실서버 연결)는 "Live"
 const MODE = modeCopy(demoMode)
 
-// 세션이 있으면 서버 언어도 바꾼다 (store.changeLang). 바꾸는 중에는 다시 누르지 못하게 잠근다
-function LangToggle({ onDark = false }: { onDark?: boolean }) {
-  const { lang, changeLang, langPending } = useApp()
+// 왼쪽 위 햄버거 버튼. 눌러서 메뉴(SideMenu)를 연다
+function MenuButton({ onDark = false }: { onDark?: boolean }) {
+  const { lang, menuOpen, setMenuOpen } = useApp()
   return (
-    <div className={`lang ${onDark ? 'on-dark' : ''}`} role="group" aria-label="Language" aria-busy={langPending}>
-      {(['en', 'ko'] as Lang[]).map((l) => (
-        <button key={l} aria-pressed={lang === l} disabled={langPending} onClick={() => changeLang(l)}>
-          {l === 'en' ? 'EN' : '한'}
+    <button className={`icon-btn ${onDark ? 'on-dark' : ''}`} onClick={() => setMenuOpen(true)} aria-label={UI.menuOpen[lang]} aria-haspopup="dialog" aria-expanded={menuOpen}>
+      <MenuIcon size={22} />
+    </button>
+  )
+}
+
+// 햄버거 메뉴. 처음 화면으로 가기와 언어 설정이 있다. 언어는 라디오 목록으로 고른다
+// (선택지가 한눈에 보이고 한 번에 고를 수 있으며, 다국어 팩이 늘면 목록에 항목만 더하면 된다).
+// 세션이 있으면 서버 언어도 바꾼다 (store.changeLang). 바꾸는 중에는 다시 누르지 못하게 잠근다
+export function SideMenu() {
+  const app = useApp()
+  const { lang, changeLang, langPending, menuOpen, setMenuOpen, messages, routeActive } = app
+  const [confirmHome, setConfirmHome] = useState(false)
+  const close = () => {
+    setConfirmHome(false)
+    setMenuOpen(false)
+  }
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+  if (!menuOpen) return null
+
+  // 처음 화면으로 가면 세션을 버린다. 진행 중인 대화나 길안내가 있으면 한 번 확인한다
+  const hasProgress = routeActive || messages.length > 1
+  const goHome = () => {
+    if (hasProgress && !confirmHome) return setConfirmHome(true)
+    close()
+    app.reset()
+  }
+
+  return (
+    <div className="menu-backdrop" onClick={close}>
+      <nav className="menu" role="dialog" aria-modal="true" aria-label={UI.menu[lang]} onClick={(e) => e.stopPropagation()}>
+        <div className="menu-head">
+          <h2>{UI.menu[lang]}</h2>
+          <button className="icon-btn" onClick={close} aria-label={UI.close[lang]}>
+            <X size={22} />
+          </button>
+        </div>
+        <button className="menu-item" onClick={goHome}>
+          <Home size={20} /> {UI.menuHome[lang]}
         </button>
-      ))}
+        {confirmHome && (
+          <div className="menu-confirm" role="alertdialog" aria-label={UI.homeConfirm[lang]}>
+            <p>{UI.homeConfirm[lang]}</p>
+            <div className="menu-confirm-actions">
+              <button className="btn secondary" onClick={() => setConfirmHome(false)}>
+                {UI.cancel[lang]}
+              </button>
+              <button className="btn primary" onClick={goHome}>
+                {UI.homeConfirmYes[lang]}
+              </button>
+            </div>
+          </div>
+        )}
+        <p className="label menu-label" id="menu-lang-label">
+          {UI.menuLanguage[lang]}
+        </p>
+        <div className="menu-lang" role="radiogroup" aria-labelledby="menu-lang-label" aria-busy={langPending}>
+          {LANGUAGE_OPTIONS.map((o) => (
+            <button key={o.code} role="radio" aria-checked={lang === o.code} className={lang === o.code ? 'selected' : ''} disabled={langPending} onClick={() => changeLang(o.code)}>
+              <span lang={o.code}>{o.label}</span>
+              {lang === o.code && <Check size={18} />}
+            </button>
+          ))}
+        </div>
+      </nav>
     </div>
   )
 }
@@ -50,6 +115,7 @@ function FloorBadge({ floor }: { floor: string }) {
 // 장소 이름. 그래프에 없는 노드는 이름을 지어내지 않고 node id를 그대로 보여 준다
 const placeName = (place: PlaceView, lang: Lang) => place.name?.[lang] ?? place.nodeId
 
+// 허브 화면(채팅)은 왼쪽에 햄버거와 브랜드, 하위 화면은 뒤로 가기를 둔다
 function TopBar({ title, onBack, right }: { title?: ReactNode; onBack?: () => void; right?: ReactNode }) {
   return (
     <header className="topbar">
@@ -58,12 +124,15 @@ function TopBar({ title, onBack, right }: { title?: ReactNode; onBack?: () => vo
           <ArrowLeft size={22} />
         </button>
       ) : (
-        <span className="brand">
-          <LineMark /> Hangil
-        </span>
+        <>
+          <MenuButton />
+          <span className="brand">
+            <LineMark /> Hangil
+          </span>
+        </>
       )}
       {title && <h1 className="topbar-title">{title}</h1>}
-      <div className="topbar-right">{right ?? <LangToggle />}</div>
+      {right && <div className="topbar-right">{right}</div>}
     </header>
   )
 }
@@ -83,7 +152,7 @@ function LineMark({ size = 22 }: { size?: number }) {
 /* ---------- Welcome ---------- */
 
 export function Welcome() {
-  const { lang, setLang, starting, startSession } = useApp()
+  const { lang, starting, startSession } = useApp()
   return (
     <main className="screen welcome">
       <div className="welcome-line" aria-hidden>
@@ -108,15 +177,6 @@ export function Welcome() {
         <p className="welcome-station">{UI.station[lang]}</p>
       </div>
       <div className="welcome-foot">
-        <p className="label">{UI.chooseLang[lang]}</p>
-        <div className="lang-choice">
-          {(['en', 'ko'] as Lang[]).map((l) => (
-            <button key={l} className={lang === l ? 'selected' : ''} aria-pressed={lang === l} onClick={() => setLang(l)}>
-              {lang === l && <Check size={18} />}
-              {l === 'en' ? 'English' : '한국어'}
-            </button>
-          ))}
-        </div>
         {starting.error && (
           <p className="start-error" role="alert">
             <AlertTriangle size={16} /> {UI.startFailed[lang]}
@@ -669,10 +729,10 @@ function RouteWaiting() {
     <main className="screen route">
       <header className="route-head">
         <div className="route-head-top">
+          <MenuButton onDark />
           <button className="icon-btn on-dark" onClick={() => app.setScreen('chat')} aria-label={UI.ask[lang]}>
             <MessageCircle size={22} />
           </button>
-          <LangToggle onDark />
         </div>
         <p className="route-to">{UI.to[lang]}</p>
       </header>
@@ -729,10 +789,10 @@ export function RouteScreen() {
     <main className={`screen route ${view === 'street' ? 'street-mode' : ''}`}>
       <header className="route-head">
         <div className="route-head-top">
+          <MenuButton onDark />
           <button className="icon-btn on-dark" onClick={() => app.setScreen('chat')} aria-label={UI.ask[lang]}>
             <MessageCircle size={22} />
           </button>
-          <LangToggle onDark />
         </div>
         <p className="route-to">{UI.to[lang]}</p>
         <h1 className="route-dest">{placeName(guide.destination, lang)}</h1>
