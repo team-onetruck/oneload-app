@@ -1,8 +1,9 @@
 /**
  * Date: 2026-10-23
  * Author: Jung Minkyu
- * Purpose: 사진 위치 인식을 서버에 요청하고 응답을 화면이 쓰는 결과(후보 / 재촬영)로 바꾼다
+ * Purpose: 사진 위치 인식을 서버에 요청하고 응답을 화면이 쓰는 결과(후보 / 재촬영 / 직접 선택)로 바꾼다
  */
+import { isAiServiceUnavailable } from '../../api/errors'
 import type { ApiAdapter, LocalizationOut, SessionStatus } from '../../api/types'
 import { compressImage } from './compressImage'
 
@@ -21,6 +22,9 @@ export type LocateResult =
   | { kind: 'candidates'; localizationId: string; candidates: LocationCandidate[]; session: SessionStatus }
   // 후보 없음. 서버가 준 재촬영 안내(retake_hint)를 그대로 보여 준다.
   | { kind: 'no_match'; retakeHint: string | null; session: SessionStatus }
+  // 사진 인식을 쓸 수 없음(503 AI_SERVICE_UNAVAILABLE). 후보 없이 직접 선택으로 넘긴다.
+  // 서버는 이때 세션을 바꾸지 않으므로(advance 전에 오류) 반영할 session이 없다.
+  | { kind: 'manual'; reason: 'ai_unavailable' }
 
 // 후보 순서는 서버가 정한 그대로 쓴다. rank_score는 순서용이라 화면에 확률처럼 보여 주지 않는다.
 export function toLocateResult(out: LocalizationOut): LocateResult {
@@ -37,10 +41,17 @@ export async function locateFromPhoto(
   compress: (photo: Blob) => Promise<Blob> = compressImage,
 ): Promise<LocateResult> {
   const image = await compress(photo)
-  const out = await api.postLocalization(req.sessionId, {
-    image,
-    map_version: req.mapVersion,
-    last_node_id: req.lastNodeId ?? null,
-  })
+  let out: LocalizationOut
+  try {
+    out = await api.postLocalization(req.sessionId, {
+      image,
+      map_version: req.mapVersion,
+      last_node_id: req.lastNodeId ?? null,
+    })
+  } catch (error) {
+    // retryable이어도 다시 보내지 않는다. 위치를 추측하지 않고 사용자가 목록에서 고르게 한다.
+    if (isAiServiceUnavailable(error)) return { kind: 'manual', reason: 'ai_unavailable' }
+    throw error
+  }
   return toLocateResult(out)
 }

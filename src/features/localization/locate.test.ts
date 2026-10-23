@@ -89,8 +89,7 @@ describe('locateFromPhoto', () => {
   it('후보 응답이면 위치를 확정하지 않고 후보 결과와 서버 session을 돌려준다', async () => {
     const server = fakeServer(200, CANDIDATES)
     const result = await locateFromPhoto(server.api, { sessionId: 'ses_1', mapVersion: MAP_VERSION }, PHOTO, noCompress)
-    expect(result.kind).toBe('candidates')
-    expect(result.session).toEqual({ state: 'needs_confirmation', revision: 4 })
+    expect(result).toMatchObject({ kind: 'candidates', localizationId: 'loc_1', session: { state: 'needs_confirmation', revision: 4 } })
     // 확정 요청은 사용자가 고른 뒤에만 따로 보낸다.
     expect(server.calls.map((c) => c.url)).toEqual(['/api/v1/sessions/ses_1/localizations'])
   })
@@ -99,5 +98,31 @@ describe('locateFromPhoto', () => {
     const server = fakeServer(200, NO_MATCH)
     const result = await locateFromPhoto(server.api, { sessionId: 'ses_1', mapVersion: MAP_VERSION }, PHOTO, noCompress)
     expect(result).toEqual({ kind: 'no_match', retakeHint: NO_MATCH.retake_hint, session: NO_MATCH.session })
+  })
+})
+
+describe('locateFromPhoto 503 폴백', () => {
+  // 지금 서버(NoVision)가 실제로 보내는 오류 본문 (backend/app/ai/vision.py, app/errors.py)
+  const AI_UNAVAILABLE = {
+    error: { code: 'AI_SERVICE_UNAVAILABLE', message: 'Photo recognition is not configured on this server.', retryable: true, details: {} },
+    request_id: 'req_1',
+  }
+
+  it('503 AI_SERVICE_UNAVAILABLE이면 후보 없이 직접 선택으로 넘기고 다시 보내지 않는다', async () => {
+    const server = fakeServer(503, AI_UNAVAILABLE)
+    const result = await locateFromPhoto(server.api, { sessionId: 'ses_1', mapVersion: MAP_VERSION }, PHOTO, noCompress)
+    expect(result).toEqual({ kind: 'manual', reason: 'ai_unavailable' })
+    expect(server.calls).toHaveLength(1)
+  })
+
+  it('다른 오류(409 INVALID_STATE 등)는 직접 선택으로 바꾸지 않고 그대로 던진다', async () => {
+    const server = fakeServer(409, {
+      error: { code: 'INVALID_STATE', message: 'Not allowed while the session is idle.', retryable: false, details: { state: 'idle' } },
+      request_id: 'req_2',
+    })
+    await expect(locateFromPhoto(server.api, { sessionId: 'ses_1', mapVersion: MAP_VERSION }, PHOTO, noCompress)).rejects.toMatchObject({
+      code: 'INVALID_STATE',
+      status: 409,
+    })
   })
 })
