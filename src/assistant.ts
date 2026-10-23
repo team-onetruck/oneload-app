@@ -81,7 +81,10 @@ const CHIP = {
 
 export function classify(raw: string): Intent {
   const s = raw.toLowerCase()
-  const has = (...k: string[]) => k.some((w) => s.includes(w))
+  // 영어 키워드는 단어 앞쪽 경계에서만 맞춘다. "express" 안의 "press"는 buy가 아니고, "tickets"처럼 뒤에 붙는 말은 그대로 맞는다.
+  // 한국어는 조사가 바로 붙으므로 부분 문자열로 찾는다.
+  const has = (...k: string[]) =>
+    k.some((w) => (/^[\x20-\x7e]+$/.test(w) ? new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(s) : s.includes(w)))
   if (has('fare', 'price', 'cost', 'how much', '요금', '얼마', '가격')) return 'fare'
   if (has('lost', 'wrong', '잘못', '길을 잃', '헤매')) return 'lost'
   if (has('recharge', 'top up', 'top-up', 'charge', '충전')) return 'recharge'

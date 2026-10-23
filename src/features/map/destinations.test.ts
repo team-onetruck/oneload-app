@@ -7,13 +7,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { createApiClient } from '../../api/client'
 import { createHttpAdapter } from '../../api/httpAdapter'
 import type { PoisOut } from '../../api/types'
-import { NODES, POIS as DEMO_POIS } from '../../data'
 import { MAP_ID, MAP_VERSION, POIS } from '../../test/fixtures/seoulStation'
 import { mockBackend } from '../../test/handlers'
 import { messageBody, replyEffects } from '../chat/replyEffects'
 import { sendChat } from '../chat/sendChat'
 import type { ChatHooks } from '../chat/sendChat'
-import { categoryText, destinationViews, mockDestinationViews } from './destinations'
+import { categoryText, destinationViews } from './destinations'
 import { createMapCache } from './graphCache'
 
 describe('destinationViews', () => {
@@ -57,15 +56,6 @@ describe('createMapCache', () => {
     expect(load).toHaveBeenCalledTimes(1)
     await cache.get('other-map')
     expect(load).toHaveBeenCalledTimes(2)
-  })
-})
-
-describe('mockDestinationViews', () => {
-  it('mock 모드 목록은 data.ts 목적지를 그대로 쓰고, 표 사는 곳은 category로 정한다', () => {
-    const views = mockDestinationViews()
-    expect(views.map((v) => v.poiId)).toEqual(DEMO_POIS.map((p) => p.id))
-    expect(views.find((v) => v.poiId === 'expressDesk')).toMatchObject({ name: NODES.expressDesk.name, floor: 'B2', category: { en: 'Tickets', ko: '승차권' }, tickets: true })
-    expect(views.filter((v) => v.tickets).map((v) => v.poiId)).toEqual(['expressDesk', 'machines'])
   })
 })
 

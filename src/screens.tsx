@@ -4,7 +4,7 @@ import {
   AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpDown, Banknote, BookOpen, Camera, Check, ChevronRight, Footprints,
   ImagePlus, List, MessageCircle, Navigation, RefreshCw, Rotate3d, RotateCcw, Route, ScanLine, Star, Ticket, TimerOff, X,
 } from 'lucide-react'
-import { API_MODE } from './api/mode'
+import { apiMode } from './api'
 import { render } from './assistant'
 import type { Rendered } from './assistant'
 import { TRAIN_NAME } from './data'
@@ -179,7 +179,7 @@ function fromRendered(r: Rendered, lang: Lang, app: ReturnType<typeof useApp>): 
     unverified: r.unverified ? [r.unverified] : [],
     refused: r.status === 'cannot_answer',
     sources: (r.sources ?? []).map((s) => ({ id: s.id, title: s.title[lang], url: s.url ?? null, verifiedAt: s.verifiedAt })),
-    chips: (r.chips ?? []).map((c) => ({ key: c.intent, label: c.label[lang], send: () => app.sendChip(c.label, c.intent) })),
+    chips: (r.chips ?? []).map((c) => ({ key: c.intent, label: c.label[lang], send: () => app.sendChip(c.label) })),
     actions: r.actions ?? [],
   }
 }
@@ -268,7 +268,6 @@ function AssistantMsg({ m, latest }: { m: Msg; latest: boolean }) {
     if (a === 'findMe' || a === 'retake') app.setScreen('locate')
     if (a === 'pickLocation') app.setScreen('manual')
     if (a === 'startRoute') app.startRoute()
-    if (a === 'retry') app.retry()
     if (a === 'pickDest') app.setScreen('destinations')
     if (a === 'restart') app.reset()
   }
@@ -460,7 +459,7 @@ export function Locate() {
           <p className="label pad">{UI.demoPhotos[lang]}</p>
           <div className="demo-photos">
             {DEMO_PHOTOS.map((p) => (
-              <button key={p.id} className="demo-photo" onClick={() => app.analyzePhoto({ src: null, scenario: p.id })}>
+              <button key={p.id} className="demo-photo" onClick={() => app.analyzeDemoPhoto(p.id)}>
                 <DemoSign scenario={p.id} />
                 <span>{p.label[lang]}</span>
               </button>
@@ -846,10 +845,7 @@ export function Arrived() {
   if (!place) return null
   const goChat = (intent: 'buy' | 'platform') => {
     app.setScreen('chat')
-    app.sendChip(
-      intent === 'buy' ? { en: 'How do I buy a ticket?', ko: '승차권은 어떻게 사요?' } : { en: 'Go to the platform', ko: '승강장으로 가기' },
-      intent,
-    )
+    app.sendChip(intent === 'buy' ? { en: 'How do I buy a ticket?', ko: '승차권은 어떻게 사요?' } : { en: 'Go to the platform', ko: '승강장으로 가기' })
   }
   return (
     <main className="screen arrived">
@@ -1025,7 +1021,7 @@ export function DemoPanel() {
               </button>
             </div>
             <p className="label">
-              {UI.sessionState[lang]} · rev {session?.revision ?? '–'} · {API_MODE}
+              {UI.sessionState[lang]} · rev {session?.revision ?? '–'} · {apiMode}
               {app.sessionInfo && ` · ${app.sessionInfo.id}`}
             </p>
             <ol className="state-line">

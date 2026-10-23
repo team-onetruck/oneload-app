@@ -2,7 +2,7 @@
 
 Clickable, phone-sized prototype of the Hangil demo client for the Seoul Station / AREX scenario: a foreign visitor who doesn't know how tickets, transit cards and cash work, gets to the right ticket point and platform.
 
-**연결 상태 (2026-10-23, #19 기준).** `VITE_API_MODE`로 mock 모드와 http 모드를 고른다. mock 모드는 서버를 부르지 않고 브라우저 안의 데모 규칙으로 동작한다. http 모드(기본)에서는 세션 생성, 채팅, 언어 전환, 목적지 목록, 사진 위치 인식, 위치 확정, 경로 안내, 안내 시작·도착·취소가 서버로 동작한다. 기능별 상태는 [백엔드 연결](#백엔드-연결-vite_api_mode) 표를 본다.
+**연결 상태 (2026-10-23, #19 기준).** `VITE_API_MODE`로 mock 모드와 http 모드를 고른다. mock 모드는 서버를 부르지 않고, 같은 화면 흐름을 브라우저 안의 mock 어댑터(데모 규칙)가 받는다. http 모드(기본)에서는 세션 생성, 채팅, 언어 전환, 목적지 목록, 사진 위치 인식, 위치 확정, 경로 안내, 안내 시작·도착·취소가 서버로 동작한다. 기능별 상태는 [백엔드 연결](#백엔드-연결-vite_api_mode) 표를 본다.
 
 - Floors of AREX ticket points (B2 express, B3 all-stop) and platforms (B7) follow the [AREX official guide](https://www.airportrailroad.com/co/steUsfGud.do), checked 2026-10-22.
 - Passages, distances, sign wording and "demo doc" sources are placeholders until the field survey.
@@ -31,7 +31,7 @@ Desktop shows a 390×844 phone frame; on a phone it fills the screen.
 | 값 | 동작 |
 | --- | --- |
 | `http` (기본, `mock`이 아닌 모든 값) | 아래 표에서 "서버 연결됨"인 기능은 백엔드 `/api/v1`을 호출한다 |
-| `mock` | 서버를 부르지 않는다. 가짜 세션(`src/features/session/mockSession.ts`), 키워드 규칙(`assistant.ts`), 경로 탐색(`route.ts`)으로 동작한다 |
+| `mock` | 서버를 부르지 않는다. 화면은 http와 같은 경로로 호출하고, mock 어댑터(`src/api/mockAdapter.ts`)가 키워드 규칙(`assistant.ts`), 데모 지도(`data.ts`), 경로 탐색(`route.ts`)으로 서버와 같은 모양의 응답을 준다 |
 
 http 모드의 기능별 상태 (`src/store.tsx` 기준):
 
@@ -74,6 +74,7 @@ pnpm e2e      # Playwright(pnpm test:e2e). 개발 서버를 mock(4179)·http(418
 
 두 명령 모두 서버 없이 돈다. vitest는 가짜 fetch와 MSW 핸들러로 백엔드 계약을 흉내 낸다. Playwright 스모크는 mock 모드에서 시작 화면이 뜨는지 보고,
 시나리오 3개(직통열차, 일반열차+카드 없음, 사진 503 → 직접 선택)는 http 모드에서 `/api/v1`을 가로채 같은 MSW 핸들러가 답하게 해 화면 흐름과 요청 순서를 본다(`e2e/support/mockApi.ts`).
+mock 기준선 5개(`e2e/mock/`)는 서버 없는 데모 흐름이 그대로인지, `/api`로 나가는 요청이 없는지 본다.
 그래서 실서버에서 채팅 → 사진 → 경로 전체 흐름이 동작한다는 증거는 아니다. 자세한 범위는 [docs/ci-cd.md의 검증 범위](docs/ci-cd.md#검증-범위-무엇을-증명하고-무엇을-증명하지-않는가)를 본다.
 
 ## Deploy (macserver)
@@ -91,12 +92,12 @@ The **Demo** pill (top of the desktop frame; on phones open the URL with `?demo`
 
 | 항목 | mock 모드 | http 모드 |
 | --- | --- | --- |
-| 세션 상태 줄 (state · rev · 모드) | 가짜 세션 서버(`mockSession.ts`)의 상태 | 서버 응답의 `session.state`·`revision`. 세션 id도 함께 보인다 |
-| 다음 AI 요청 실패시키기 (Next AI request times out) | 다음 mock 답변을 오류 말풍선으로 바꾼다 | 다음 채팅 요청(`/messages`)의 첫 시도를 보내지 않고 타임아웃으로 처리한다. 다시 시도는 실제로 보낸다. 사진·경로 요청에는 적용되지 않는다 |
+| 세션 상태 줄 (state · rev · 모드) | mock 어댑터 응답의 `session.state`·`revision` | 서버 응답의 `session.state`·`revision`. 세션 id도 함께 보인다 |
+| 다음 AI 요청 실패시키기 (Next AI request times out) | http와 같다. 다음 채팅 요청의 첫 시도를 타임아웃으로 처리하고, 오류 알림의 다시 시도로 답을 받는다 | 다음 채팅 요청(`/messages`)의 첫 시도를 보내지 않고 타임아웃으로 처리한다. 다시 시도는 실제로 보낸다. 사진·경로 요청에는 적용되지 않는다 |
 | 직접 올린 사진의 결과 (Result for uploaded photos) | 보인다. 올린 사진을 환승 안내판 / KTX 맞이방 / 흐린 사진 중 무엇으로 볼지 고른다 | 숨겨진다. 올린 사진은 `POST /sessions/{id}/localizations`로 보내고 결과는 서버 응답을 따른다 |
-| 데모 초기화 (Reset demo) | 처음 화면으로 돌아간다 | 안내 중이면 `navigation_cancelled`를 보낸 뒤 보관한 세션 토큰을 지우고 처음 화면으로 돌아간다 |
+| 데모 초기화 (Reset demo) | http와 같다(취소 이벤트와 세션 정리를 mock 어댑터가 받는다) | 안내 중이면 `navigation_cancelled`를 보낸 뒤 보관한 세션 토큰을 지우고 처음 화면으로 돌아간다 |
 
-위치 확인 화면의 "또는 데모 사진으로 해보기"(Or try a demo photo) 버튼도 mock 모드에서만 보인다. http 모드에서는 사진을 직접 찍거나 올려야 하고, 지금 서버는 사진 인식이 연결되지 않아(`NoVision`) `503`을 돌려주므로 직접 선택 화면으로 이어진다.
+위치 확인 화면의 "또는 데모 사진으로 해보기"(Or try a demo photo) 버튼도 mock 모드에서만 보인다. 데모 사진도 작은 JPEG로 만들어 올린 사진과 같은 압축·업로드 경로로 보낸다. http 모드에서는 사진을 직접 찍거나 올려야 하고, 지금 서버는 사진 인식이 연결되지 않아(`NoVision`) `503`을 돌려주므로 직접 선택 화면으로 이어진다.
 
 ## Scenario map
 

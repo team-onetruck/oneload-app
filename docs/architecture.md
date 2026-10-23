@@ -24,7 +24,7 @@ Purpose: app의 현재(As-Is)와 목표(To-Be) 아키텍처, 기술 스택, 변�
 app (React, 브라우저)                                    backend (FastAPI /api/v1)
   screens.tsx   화면
       ↓
-  store.tsx     상태. VITE_API_MODE로 http / mock 분기
+  store.tsx     상태. 서버 호출은 src/api 어댑터 하나로만 한다 (모드 분기는 src/api/index.ts 한 곳)
       │
       ├─ [http] 세션 생성 · 채팅 · 언어 전환 · 목적지 목록 · 사진 위치 · 위치 확정 · 경로 · 안내 이벤트
       │     features/session, chat, recovery, localization, map, route
@@ -39,8 +39,8 @@ app (React, 브라우저)                                    backend (FastAPI /a
       │                                                   GET  /maps/{id}/graph
       │                                                   GET  /maps/{id}/pois
       │
-      └─ [mock] 전부 로컬
-            features/session/mockSession.ts, assistant.ts, route.ts, data.ts
+      └─ [mock] 같은 호출을 src/api/mockAdapter.ts가 서버 없이 받는다
+            assistant.ts, data.ts, route.ts, api/sessionMachine.ts로 서버와 같은 모양의 응답을 만든다
 ```
 
 | 백엔드 엔드포인트 | `src/api` 함수 | 화면에서 호출 (http 모드) |
@@ -58,9 +58,9 @@ app (React, 브라우저)                                    backend (FastAPI /a
 | `GET /health`, `GET /maps`, `POST /sessions/{id}/feedback` | `getHealth` 등 | 화면에서 쓰지 않는다 |
 | (데모 패널) | 없음 | 사진 결과 선택과 위치 확인 화면의 데모 사진은 mock 모드에서만 보인다(`store.tsx`의 `demoPhotos`). http 모드의 사진은 `/localizations` 응답을 따른다 |
 
-- mock 모드는 아직 `ApiAdapter` 구현이 아니라 `store.tsx`의 `API_MODE` 분기로 동작한다. 3장의 mock adapter는 목표 구조다.
+- mock 모드도 `ApiAdapter` 구현(`src/api/mockAdapter.ts`)이다. 모드 분기는 `src/api/index.ts`에서 어댑터를 고르는 한 곳뿐이고 store는 어댑터 하나만 본다. 세션 상태 기계(`src/api/sessionMachine.ts`)는 mock 어댑터와 MSW 핸들러가 함께 쓴다.
 - 단계 진행('다음')은 화면 상태로만 두고 서버에 알리지 않는다. 서버 세션의 `state`·`revision`은 경로와 안내 이벤트 응답으로 바뀐다.
-- mock 모드의 경로는 `route.ts`의 `findRoute`(다익스트라)다. `features/route/guide.ts`가 서버 경로와 같은 화면 모델로 바꾼다.
+- mock 어댑터의 경로는 `route.ts`의 `findRoute`(다익스트라) 결과를 `RouteOut` 모양으로 돌려준 것이다. 화면은 http와 같은 `serverGuide`로 그린다.
 - 백엔드 쪽은 그대로다: `RuleAgent`(키워드 규칙)와 `NoVision`(사진은 503)이 기본이고, agent 레포의 `LLMAgent`는 아직 연결되지 않았다.
 
 ## 3. To-Be: API 계층을 두고 서버를 진실로 삼는다
