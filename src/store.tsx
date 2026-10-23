@@ -36,7 +36,6 @@ import type { FailHandlers } from './features/recovery/context'
 import { sendWithRecovery } from './features/recovery/retry'
 import { patchLanguage } from './features/session/language'
 import { createMockSessionServer } from './features/session/mockSession'
-import { localNodeOf, serverNodeOf } from './features/session/nodeBridge'
 import { serverPoiOf } from './features/session/poiBridge'
 import { findRoute } from './route'
 import type { Step } from './route'
@@ -107,15 +106,8 @@ const TICKET_POIS: ReadonlySet<PoiId> = new Set(['expressDesk', 'machines'])
 
 const isNodeId = (id: string): id is NodeId => id in NODES
 
-// 현재 위치(here)를 데모 경로(data.ts)의 노드로 읽는다. http 모드는 서버 node_id라 nodeBridge로 잇는다 (작업 4에서 지운다)
-const localNode = (id: string | null): NodeId | null => {
-  if (id === null) return null
-  if (API_MODE === 'mock') return isNodeId(id) ? id : null
-  return localNodeOf(id)
-}
-
-// 데모 경로의 노드를 현재 위치로 남길 때. http 모드는 서버 node_id로 바꿔 둔다
-const placeOf = (node: NodeId): string => (API_MODE === 'mock' ? node : serverNodeOf(node))
+// mock 모드의 현재 위치(here)는 data.ts NodeId다. http 모드는 서버 node_id를 그대로 쓰고 데모 노드로 바꾸지 않는다
+const mockNode = (id: string | null): NodeId | null => (id !== null && isNodeId(id) ? id : null)
 
 function useAppState() {
   const [lang, setLang] = useState<Lang>('en')
@@ -128,7 +120,7 @@ function useAppState() {
   const [langPending, setLangPending] = useState(false)
   const [train, setTrain] = useState<TrainType | null>(null)
   const [dest, setDest] = useState<PoiId | null>(null)
-  // 서버가 정한 목적지 POI id. dest는 데모 경로용으로 이어 붙인 값이다 (poiBridge)
+  // 서버가 정한 목적지 POI id. http 모드의 경로 요청은 이 값을 쓴다. dest는 데모 PoiId로 이은 값이다 (mock 경로, 목적지 목록, 도착 화면; poiBridge)
   const [destinationPoiId, setDestinationPoiId] = useState<string | null>(null)
   // 현재 위치. http 모드는 서버가 확정한 node_id, mock 모드는 data.ts NodeId
   const [here, setHere] = useState<string | null>(null)
@@ -144,7 +136,7 @@ function useAppState() {
   const [photo, setPhoto] = useState<Photo | null>(null)
   // mock 모드의 데모 후보 (data.ts SCENARIOS)
   const [candidates, setCandidates] = useState<Candidate[]>([])
-  // http 모드: 지도 그래프(직접 선택 목록, 후보 이름, 작업 4의 경로 화면)와 마지막 사진 결과(후보 / 재촬영 / 503 직접 선택)
+  // http 모드: 지도 그래프(직접 선택 목록, 후보 이름, 경로 화면의 노드 이름·사진)와 마지막 사진 결과(후보 / 재촬영 / 503 직접 선택)
   const [graph, setGraph] = useState<GraphOut | null>(null)
   const [located, setLocated] = useState<LocateResult | null>(null)
   // 위치 확정 요청을 보내는 중이면 후보·목록 버튼을 잠근다
@@ -179,8 +171,7 @@ function useAppState() {
   // 응답의 session을 그대로 반영한다. 늦게 도착한 옛 응답이 더 새 값을 덮지 않도록 revision이 작으면 버린다.
   const applySession = (next: SessionStatus) => setSession((cur) => (cur && next.revision < cur.revision ? cur : next))
 
-  // mock 모드에서만 가짜 서버가 상태를 바꾼다. http 모드의 위치·경로 흐름은 아직 서버에 알리지 않으므로
-  // (작업 3, 4) 세션도 바꾸지 않는다.
+  // mock 모드에서만 가짜 서버가 상태를 바꾼다. http 모드는 서버 응답의 session만 반영한다.
   const mockMove = (state: SessionState) => {
     if (API_MODE === 'mock') applySession(mockServer.current.advance(state))
   }
@@ -272,7 +263,7 @@ function useAppState() {
     const { here } = live.current
     setDest(poi)
     mockMove(here ? 'ready_to_navigate' : 'needs_location')
-    reply({ kind: 'destSet', poi, from: localNode(here), tip })
+    reply({ kind: 'destSet', poi, from: mockNode(here), tip })
   }
 
   const runIntent = (intent: Intent, withPhoto: boolean) => {
@@ -711,7 +702,7 @@ function useAppState() {
     if (stepIdx + 1 < steps.length) return setStepIdx(stepIdx + 1)
     const arrivedAt = steps.length ? steps[steps.length - 1].edge.to : startNode
     setStepIdx(steps.length)
-    setHere(arrivedAt && placeOf(arrivedAt))
+    setHere(arrivedAt)
     mockMove('arrived')
     setScreen('arrived')
   }
@@ -795,7 +786,7 @@ function useAppState() {
 
   return {
     lang, setLang, changeLang, langPending, screen, setScreen, session, sessionInfo, applySession, starting, startSession, routeActive,
-    train, dest, destinationPoiId, here, hereNode: localNode(here), guide, routing, routeError, arrivedPlace, atTickets, stepIdx, messages, photo,
+    train, dest, destinationPoiId, here, guide, routing, routeError, arrivedPlace, atTickets, stepIdx, messages, photo,
     graph, ensureGraph, candidateList, retakeHint, manualList, manualReason, confirming, demoPhotos,
     failNext, setFailNext, uploadScenario, setUploadScenario, demoOpen, setDemoOpen,
     sendText, sendChip, sendSuggested, retry, pickDestination, startRoute, analyzePhoto, confirmLocation, nextStep, reportLost, reset,
