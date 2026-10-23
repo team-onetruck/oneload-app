@@ -2,7 +2,7 @@
 
 Clickable, phone-sized prototype of the Hangil demo client for the Seoul Station / AREX scenario: a foreign visitor who doesn't know how tickets, transit cards and cash work, gets to the right ticket point and platform.
 
-**연결 상태 (2026-10-23, #19 기준).** `VITE_API_MODE`로 mock 모드와 http 모드를 고른다. mock 모드는 서버를 부르지 않고, 같은 화면 흐름을 브라우저 안의 mock 어댑터(데모 규칙)가 받는다. http 모드(기본)에서는 세션 생성, 채팅, 언어 전환, 목적지 목록, 사진 위치 인식, 위치 확정, 경로 안내, 안내 시작·도착·취소가 서버로 동작한다. 기능별 상태는 [백엔드 연결](#백엔드-연결-vite_api_mode) 표를 본다.
+**연결 상태 (2026-10-23, #25 기준, 연동 작업 완료).** `VITE_API_MODE`로 mock 모드와 http 모드를 고른다. 두 모드 모두 화면은 같은 `ApiAdapter` 호출을 쓴다. http 모드(기본)에서는 세션 생성, 채팅, 언어 전환, 목적지 목록, 사진 위치 인식, 위치 확정, 경로 안내, 안내 시작·도착·취소가 모두 서버로 동작한다. mock 모드는 서버를 부르지 않고, 같은 호출을 브라우저 안의 mock 어댑터(`src/api/mockAdapter.ts`, 데모 규칙)가 서버와 같은 모양으로 답한다. 기능별 상태는 [백엔드 연결](#백엔드-연결-vite_api_mode) 표를 본다.
 
 - Floors of AREX ticket points (B2 express, B3 all-stop) and platforms (B7) follow the [AREX official guide](https://www.airportrailroad.com/co/steUsfGud.do), checked 2026-10-22.
 - Passages, distances, sign wording and "demo doc" sources are placeholders until the field survey.
@@ -46,7 +46,7 @@ http 모드의 기능별 상태 (`src/store.tsx` 기준):
 | 위치 확정 | 서버 연결됨 | 사용자가 누른 후보(`photo_candidate`)나 목록 항목(`manual`)만 `POST /sessions/{id}/location-confirmations`로 보낸다. `409 REVISION_CONFLICT`면 navigation-state로 맞춘 뒤 한 번 다시 보낸다. 직접 선택 목록은 `GET /maps/{id}/graph`의 노드 전체다 |
 | 경로 안내 | 서버 연결됨 | 위치 확정 뒤(또는 "길안내 시작") `POST /sessions/{id}/routes`. 단계의 문구·거리·사진(`pano_id`)·화살표(`arrow_yaw_deg`)는 서버 값을 쓰고, 노드 이름과 사진 주소는 `GET /maps/{id}/graph`에서 찾는다. `409 REVISION_CONFLICT`면 navigation-state로 맞춘 뒤 한 번 다시 보낸다. 등록된 경로가 없으면(`ROUTE_NOT_FOUND`) 경로를 지어내지 않고 안내만 보여 준다 |
 | 안내 시작·도착·취소 | 서버 연결됨 | `POST /sessions/{id}/navigation-events`. 경로를 받으면 `navigation_started`, 마지막 단계를 넘기면 `arrived`, 안내 중 처음으로 가면 `navigation_cancelled`를 보낸다. 실패해도 안내는 막지 않고, 같은 `Idempotency-Key`로 한 번 다시 보낸 뒤 남은 이벤트는 다음 이벤트와 함께 보낸다 |
-| 처음으로 (초기화) | 로컬 | 안내 중이면 `navigation_cancelled`를 보낸 뒤 보관한 세션 토큰을 지운다. 서버 세션은 2시간 동안 요청이 없으면 만료된다 |
+| 처음으로 (초기화) | 로컬 (취소 이벤트만 서버로) | 안내 중이면 `navigation_cancelled`를 보낸 뒤 보관한 세션 토큰을 지운다. 서버 세션은 2시간 동안 요청이 없으면 만료된다 |
 
 '다음' 버튼은 화면의 단계만 넘기고 서버를 부르지 않는다. 서버 세션 상태(데모 패널의 state·rev)는 경로와 안내 이벤트 응답으로 바뀐다.
 목적지는 서버 `poi_id` 하나로 다룬다(데모 `data.ts`의 목적지 id는 mock 모드에서만 쓴다). 도착 화면의 "표 사는 법" 버튼은 목적지 POI의 `category`가 `tickets`인지로 정한다.
@@ -72,6 +72,13 @@ pnpm verify   # 헤더 검사 + oxlint + 타입체크 + vitest. 커밋 전에 �
 pnpm e2e      # Playwright(pnpm test:e2e). 개발 서버를 mock(4179)·http(4180) 모드로 하나씩 띄운다. 처음 한 번 pnpm exec playwright install chromium
 ```
 
+E2E는 9개이고 `playwright.config.ts`의 두 프로젝트로 나뉜다.
+
+| 프로젝트 | 개발 서버 | 테스트 |
+| --- | --- | --- |
+| `mock` | `VITE_API_MODE=mock`, 4179 | `e2e/smoke.spec.ts` 1개, `e2e/mock/` 기준선 5개 |
+| `http` | `VITE_API_MODE=http`, 4180 | `e2e/scenarios/` 3개. `/api/v1`은 `page.route`로 가로채 MSW 핸들러가 답한다 |
+
 두 명령 모두 서버 없이 돈다. vitest는 가짜 fetch와 MSW 핸들러로 백엔드 계약을 흉내 낸다. Playwright 스모크는 mock 모드에서 시작 화면이 뜨는지 보고,
 시나리오 3개(직통열차, 일반열차+카드 없음, 사진 503 → 직접 선택)는 http 모드에서 `/api/v1`을 가로채 같은 MSW 핸들러가 답하게 해 화면 흐름과 요청 순서를 본다(`e2e/support/mockApi.ts`).
 mock 기준선 5개(`e2e/mock/`)는 서버 없는 데모 흐름이 그대로인지, `/api`로 나가는 요청이 없는지 본다.
@@ -88,7 +95,7 @@ pnpm build && rsync -a --delete dist/ macserver:~/hangil-demo/dist/
 ## Demo controls
 
 The **Demo** pill (top of the desktop frame; on phones open the URL with `?demo` to get a slim tab on the right edge) opens the demo panel.
-패널에 보이는 항목과 동작은 모드마다 다르다 (`src/screens.tsx`의 `DemoPanel`, `src/store.tsx`의 `demoPhotos`).
+패널에 보이는 항목과 동작은 모드마다 다르다 (`src/screens.tsx`의 `DemoPanel`, `src/api/index.ts`의 `demoMode`).
 
 | 항목 | mock 모드 | http 모드 |
 | --- | --- | --- |
