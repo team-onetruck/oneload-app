@@ -103,10 +103,15 @@ describe('recoveryFor: 세션은 유지하는 오류', () => {
     expect(recoveryFor(error, NO_MANUAL)).toEqual({ type: 'notice', reason: 'network', actions: ['retry', 'home'] })
   })
 
-  it('400 BAD_REQUEST는 일반 오류와 다시 시도를 주고 클라이언트 버그로 기록 대상이 된다', async () => {
+  it('400 BAD_REQUEST는 일반 오류와 다시 시도, 처음으로를 주고 클라이언트 버그로 기록 대상이 된다', async () => {
     const { error } = await failed(errorResponse(400, 'BAD_REQUEST'))
-    expect(recoveryFor(error, ALL)).toEqual({ type: 'notice', reason: 'failed', actions: ['retry'] })
+    expect(recoveryFor(error, ALL)).toEqual({ type: 'notice', reason: 'failed', actions: ['retry', 'home'] })
     expect(isClientBug(error)).toBe(true)
+  })
+
+  it('재시도할 수 없는 곳의 400 BAD_REQUEST도 처음으로가 남아 갇히지 않는다', async () => {
+    const { error } = await failed(errorResponse(400, 'BAD_REQUEST'))
+    expect(recoveryFor(error, { retry: false, manual: false })).toEqual({ type: 'notice', reason: 'failed', actions: ['home'] })
   })
 
   it('공통 형식이 아닌 500은 일반 오류와 다시 시도, 처음으로를 준다', async () => {

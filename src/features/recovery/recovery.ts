@@ -59,8 +59,9 @@ const NOTICE: Partial<Record<ApiErrorCode, { reason: NoticeReason; actions: Reco
   REVISION_CONFLICT: { reason: 'conflict', actions: ['retry', 'home'] },
   // 503: 사진을 읽을 수 없으니 위치를 추측하지 않고 목록에서 고르게 한다 (CLAUDE.md)
   AI_SERVICE_UNAVAILABLE: { reason: 'ai_unavailable', actions: ['manual', 'retry'] },
-  // 400: Idempotency-Key 누락 같은 클라이언트 버그. 사용자에게는 일반 오류로 보인다
-  BAD_REQUEST: { reason: 'failed', actions: ['retry'] },
+  // 400: Idempotency-Key 누락 같은 클라이언트 버그. 사용자에게는 일반 오류로 보인다.
+  // 다시 보내도 같은 400일 수 있어 처음으로를 함께 준다
+  BAD_REQUEST: { reason: 'failed', actions: ['retry', 'home'] },
   // 공통 오류 형식이 아닌 응답 (처리되지 않은 500 등)
   UNEXPECTED_RESPONSE: { reason: 'failed', actions: ['retry', 'home'] },
 }
