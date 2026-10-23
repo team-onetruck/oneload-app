@@ -18,8 +18,9 @@ type LocationApi = Pick<ApiAdapter, 'postLocalization' | 'confirmLocation' | 'ge
 export interface LocationHooks<T> {
   fail: RecoveryValue['fail']
   onSuccess(out: T): void
-  // 409 INVALID_STATE: 지금 단계에서 할 수 없는 요청이라 다시 보내지 않고, 다시 읽은 서버 상태로 맞는 화면에 간다
-  onInvalidState(state: NavigationStateOut): void
+  // 409 INVALID_STATE: 지금 단계에서 할 수 없는 요청이라 다시 보내지 않고, 다시 읽은 서버 상태로 맞는 화면에 간다.
+  // error는 그 409 오류다 (채팅에 오류 말풍선을 남길 때 쓴다)
+  onInvalidState(state: NavigationStateOut, error: unknown): void
   // 오류 알림에서 '다시 시도'를 눌러 다시 보내기 시작할 때
   onRetry(): void
   // 오류 알림의 '목록에서 고르기' (위치 직접 선택 화면)
@@ -31,7 +32,7 @@ function recoverable<T>(api: LocationApi, sessionId: string, send: (options: Mut
     onSuccess: hooks.onSuccess,
     manual: hooks.manual,
     fail: (error, handlers = {}) => {
-      if (isApiError(error) && error.code === 'INVALID_STATE') return void resync(api, sessionId, hooks)
+      if (isApiError(error) && error.code === 'INVALID_STATE') return void resync(api, sessionId, hooks, error)
       const { retry } = handlers
       hooks.fail(error, {
         ...handlers,
@@ -44,9 +45,9 @@ function recoverable<T>(api: LocationApi, sessionId: string, send: (options: Mut
   })
 }
 
-async function resync<T>(api: LocationApi, sessionId: string, hooks: LocationHooks<T>) {
+async function resync<T>(api: LocationApi, sessionId: string, hooks: LocationHooks<T>, invalid: unknown) {
   try {
-    hooks.onInvalidState(await api.getNavigationState(sessionId))
+    hooks.onInvalidState(await api.getNavigationState(sessionId), invalid)
   } catch (error) {
     hooks.fail(error)
   }

@@ -44,6 +44,7 @@ async function start({ destination = true, timeoutMs }: { destination?: boolean;
 function hooks<T>() {
   const results: T[] = []
   const resyncs: NavigationStateOut[] = []
+  const invalid: unknown[] = []
   const failures: { error: unknown; handlers: FailHandlers }[] = []
   let settled: () => void = () => {}
   const next = () => new Promise<void>((resolve) => (settled = resolve))
@@ -56,14 +57,15 @@ function hooks<T>() {
       results.push(out)
       settled()
     },
-    onInvalidState: (state) => {
+    onInvalidState: (state, error) => {
       resyncs.push(state)
+      invalid.push(error)
       settled()
     },
     onRetry: vi.fn(),
     manual: vi.fn(),
   }
-  return { h, results, resyncs, failures, next }
+  return { h, results, resyncs, invalid, failures, next }
 }
 
 describe('사진 → 후보 → 확정', () => {
@@ -175,6 +177,7 @@ describe('오류 복구', () => {
 
     expect(photo.failures).toHaveLength(0)
     expect(photo.resyncs[0]).toMatchObject({ session: { state: 'idle' }, next_action: 'reply' })
+    expect(photo.invalid[0]).toMatchObject({ code: 'INVALID_STATE', status: 409 })
   })
 
   it('사진 결과가 만료(410)되면 오류 복구로 넘기고, 복구 규칙은 다시 찍기(relocate)를 준다', async () => {

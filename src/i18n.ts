@@ -41,6 +41,8 @@ export const UI = {
   retake: { en: 'Retake photo', ko: '다시 찍기' },
 
   manualTitle: { en: 'Where are you?', ko: '지금 어디에 있나요?' },
+  manualAiUnavailable: { en: 'Photo recognition isn’t available right now. Please choose where you are from the list.', ko: '지금은 사진으로 위치를 찾을 수 없어요. 목록에서 골라 주세요.' },
+  loadingPlaces: { en: 'Loading places…', ko: '장소 목록을 불러오는 중…' },
   destTitle: { en: 'Where do you want to go?', ko: '어디로 갈까요?' },
 
   to: { en: 'To', ko: '목적지' },
