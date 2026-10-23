@@ -6,7 +6,7 @@ import {
   clearSession, confirmLocation as confirmLocationApi, createRoute, createSession, demoMode, getMapGraph, getNavigationState, isApiError,
   patchSession, postLocalization, postNavigationEvents, searchPois, sendMessage, setDemoPhotoResult,
 } from './api'
-import type { GraphOut, NavigationEvent, NavigationStateOut, PoisOut, SessionStatus } from './api'
+import type { GraphOut, NavigationStateOut, PoisOut, SessionStatus } from './api'
 import type { Reply } from './assistant'
 import type { Lang, PhotoScenario, Text, TrainType } from './data'
 import { messageBody, replyEffects, resyncPlan } from './features/chat/replyEffects'
@@ -26,8 +26,10 @@ import { createGraphCache, createMapCache } from './features/map/graphCache'
 import { createNavigationEvent } from './features/route/events'
 import type { NavigationEventType } from './features/route/events'
 import { deliverEvents, sendRoute } from './features/route/flow'
+import type { DeliveryOutcome } from './features/route/flow'
 import { serverGuide, toActiveRoute } from './features/route/guide'
 import type { ActiveRoute } from './features/route/guide'
+import { createEventOutbox } from './features/route/outbox'
 import { planReroute } from './features/route/request'
 import { useRecovery } from './features/recovery/context'
 import type { FailHandlers } from './features/recovery/context'
@@ -136,8 +138,27 @@ function useAppState() {
   const poiCache = useRef(createMapCache((mapId) => searchPois(mapId)))
   // '길을 잃었어요' 뒤 위치를 다시 확정하면 같은 목적지로 다시 계산한다 
   const rerouting = useRef(false)
-  // 보내지 못한 길안내 이벤트. 다음 이벤트와 함께 보내고, 경로가 바뀌면 버린다 
-  const pendingEvents = useRef<{ routeId: string | null; events: NavigationEvent[] }>({ routeId: null, events: [] })
+  // 길안내 이벤트 대기열. 한 번에 한 묶음씩 보내고, 보내는 중인 이벤트는 다음 묶음에 넣지 않으며, 실패한 것만 되돌린다.
+  // 경로가 바뀌면 옛 대기열을 버린다 (features/route/outbox.ts)
+  const outbox = useRef(
+    createEventOutbox(async (routeId, batch): Promise<DeliveryOutcome> => {
+      const sid = live.current.sessionId
+      if (!sid) return { kind: 'failed', error: new Error('세션이 없어 길안내 이벤트를 보내지 않았어요'), pending: batch }
+      const outcome = await deliverEvents({ api: routeApi, sessionId: sid, routeId, pending: batch })
+      // 초기화 뒤에 도착한 옛 세션의 결과는 반영하지 않는다
+      if (live.current.sessionId !== sid) return outcome
+      if (outcome.kind === 'failed') {
+        console.warn('[route] 길안내 이벤트를 보내지 못했어요. 다음 이벤트와 함께 다시 보냅니다', {
+          events: batch.map((e) => e.type),
+          error: outcome.error,
+        })
+      } else {
+        // closed: 도착·취소가 이미 반영돼 있었다. 다시 읽은 서버 상태를 그대로 쓴다
+        applySession(outcome.kind === 'sent' ? outcome.session : outcome.state.session)
+      }
+      return outcome
+    }),
+  )
   // Handlers read the latest values through this ref so delayed replies
   // never act on a stale render's state.
   const sessionId = sessionInfo?.id ?? null
@@ -348,29 +369,11 @@ function useAppState() {
     setScreen(plan.screen)
   }
 
-  // 길안내 이벤트를 보낸다. 보내지 못해도 안내는 막지 않고, 남은 이벤트는 다음 이벤트와 함께 다시 보낸다.
+  // 길안내 이벤트를 보낸다. 보내지 못해도 안내는 막지 않는다. 순서와 재전송은 대기열이 맡는다.
   // event_id는 만들 때 정해져 있어서 같은 이벤트를 다시 보내도 서버는 한 번만 반영한다
-  const report = (type: NavigationEventType, routeId: string) => {
-    const sid = live.current.sessionId
-    if (!sid) return
-    const queued = pendingEvents.current.routeId === routeId ? pendingEvents.current.events : []
-    const events = [...queued, createNavigationEvent(type)]
-    pendingEvents.current = { routeId, events }
-    void deliverEvents({ api: routeApi, sessionId: sid, routeId, pending: events }).then((outcome) => {
-      if (live.current.sessionId !== sid) return
-      if (outcome.kind === 'failed') {
-        console.warn('[route] 길안내 이벤트를 보내지 못했어요. 다음 이벤트와 함께 다시 보냅니다', { type, error: outcome.error })
-        return
-      }
-      // 보낸 것만 대기열에서 뺀다. 그사이 쌓인 이벤트는 남긴다
-      const left = outcome.kind === 'sent' ? new Set(outcome.pending) : new Set<NavigationEvent>()
-      const done = new Set(events.filter((e) => !left.has(e)).map((e) => e.event_id))
-      if (pendingEvents.current.routeId === routeId) {
-        pendingEvents.current = { routeId, events: pendingEvents.current.events.filter((e) => !done.has(e.event_id)) }
-      }
-      // closed: 도착·취소가 이미 반영돼 있었다. 다시 읽은 서버 상태를 그대로 쓴다
-      applySession(outcome.kind === 'sent' ? outcome.session : outcome.state.session)
-    })
+  const report = (type: NavigationEventType, routeId: string, options?: { now?: boolean }) => {
+    if (!live.current.sessionId) return
+    outbox.current.push(routeId, createNavigationEvent(type), options)
   }
 
   // 확정된 위치에서 서버 경로를 받는다. reroute면 같은 목적지로 다시 계산한다(서버는 route_id를 유지하고 route_revision만 올린다)
@@ -411,7 +414,6 @@ function useAppState() {
           if (!current()) return
           applySession(out.session)
           rerouting.current = false
-          if (pendingEvents.current.routeId !== out.route_id) pendingEvents.current = { routeId: out.route_id, events: [] }
           setActiveRoute(toActiveRoute(out, g))
           setStepIdx(0)
           // 서버는 시작 이벤트를 ready_to_navigate에서만 받는다. 안내 중에 다시 계산한 경우는 이미 navigating이다
@@ -587,9 +589,10 @@ function useAppState() {
   }
 
   const reset = () => {
-    // 안내 중에 처음으로 가면 서버에 취소를 알린다. 요청 헤더는 보내는 순간 만들어지므로 세션 토큰을 지우기 전에 보낸다
+    // 안내 중에 처음으로 가면 서버에 취소를 알린다. 요청 헤더는 보내는 순간 만들어지므로 세션 토큰을 지우기 전에,
+    // 보내는 중인 묶음을 기다리지 않고 바로 보낸다 (세션을 버리므로 순서는 상관없다)
     const { activeRoute: route, stepIdx: at } = live.current
-    if (route && at < route.steps.length) report('navigation_cancelled', route.routeId)
+    if (route && at < route.steps.length) report('navigation_cancelled', route.routeId, { now: true })
     startSeq.current++
     // 다음 "시작하기"에서 새 세션을 만든다. 서버 세션은 2시간 동안 요청이 없으면 만료된다.
     clearSession()
@@ -603,7 +606,7 @@ function useAppState() {
     setRouting(false)
     setRouteError(null)
     rerouting.current = false
-    pendingEvents.current = { routeId: null, events: [] }
+    outbox.current.reset()
     setStepIdx(0)
     setMessages([{ id: 0, role: 'assistant', reply: { kind: 'greet' } }])
     setPhoto(null)
