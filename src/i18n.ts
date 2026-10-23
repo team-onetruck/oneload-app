@@ -7,6 +7,7 @@ export const UI = {
   connecting: { en: 'Connecting to Hangil…', ko: '한길에 연결하는 중…' },
   startFailed: { en: 'Couldn’t connect to Hangil. Check your connection and try again.', ko: '한길에 연결하지 못했어요. 연결을 확인하고 다시 시도해 주세요.' },
   demoNote: { en: 'Prototype. Floors follow the AREX official guide; passages and distances await a field survey.', ko: '프로토타입이에요. 층 정보는 AREX 공식 안내 기준, 통로·거리는 현장 확인 전이에요.' },
+  liveNote: { en: 'Connected to the Hangil server. Floors follow the AREX official guide; passages and distances await a field survey.', ko: '한길 서버에 연결돼 있어요. 층 정보는 AREX 공식 안내 기준, 통로·거리는 현장 확인 전이에요.' },
   station: { en: 'Seoul Station · AREX', ko: '서울역 · 공항철도' },
   askPlaceholder: { en: 'e.g. “Can I pay with a credit card?”', ko: '예: “신용카드로 낼 수 있어요?”' },
   send: { en: 'Send', ko: '보내기' },
@@ -89,9 +90,16 @@ export const UI = {
 
   demo: { en: 'Demo', ko: '데모' },
   demoPanel: { en: 'Demo controls', ko: '데모 설정' },
+  liveLabel: { en: 'Live', ko: '실서버' },
+  devPanel: { en: 'Dev controls', ko: '개발자 설정' },
   failNext: { en: 'Next AI request times out', ko: '다음 AI 요청 실패시키기' },
   uploadResult: { en: 'Result for uploaded photos', ko: '직접 올린 사진의 결과' },
   sessionState: { en: 'Session state', ko: '세션 상태' },
   reset: { en: 'Reset demo', ko: '데모 초기화' },
   close: { en: 'Close', ko: '닫기' },
 } satisfies Record<string, Text>
+
+// 상단 필, 설정 패널 제목, 시작 화면 문구. 서버 없는 데모(mock)와 서버에 연결된 모드(http)를 다르게 보여 준다.
+// 모드는 부르는 쪽이 src/api의 demoMode로 넘긴다
+export const modeCopy = (demo: boolean) =>
+  demo ? { pill: UI.demo, panel: UI.demoPanel, note: UI.demoNote } : { pill: UI.liveLabel, panel: UI.devPanel, note: UI.liveNote }
