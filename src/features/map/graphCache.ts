@@ -5,14 +5,15 @@
  */
 import type { GraphOut } from '../../api/types'
 
-export interface GraphCache {
+export interface MapCache<T> {
   // 같은 지도면 진행 중이거나 받아 둔 요청을 그대로 돌려준다
-  get(mapId: string): Promise<GraphOut>
+  get(mapId: string): Promise<T>
   clear(): void
 }
 
-export function createGraphCache(load: (mapId: string) => Promise<GraphOut>): GraphCache {
-  let entry: { mapId: string; promise: Promise<GraphOut> } | null = null
+// 지도마다 한 번만 받는 캐시. 그래프와 목적지 목록(GET /maps/{map_id}/pois)이 같이 쓴다
+export function createMapCache<T>(load: (mapId: string) => Promise<T>): MapCache<T> {
+  let entry: { mapId: string; promise: Promise<T> } | null = null
   return {
     get(mapId) {
       if (entry?.mapId === mapId) return entry.promise
@@ -29,3 +30,7 @@ export function createGraphCache(load: (mapId: string) => Promise<GraphOut>): Gr
     },
   }
 }
+
+export type GraphCache = MapCache<GraphOut>
+
+export const createGraphCache = (load: (mapId: string) => Promise<GraphOut>): GraphCache => createMapCache(load)
