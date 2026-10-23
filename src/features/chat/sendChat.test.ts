@@ -84,12 +84,12 @@ describe('sendChat', () => {
     const { api, sessionId } = await start()
     const t = hooks()
     await sendChat({ api, sessionId, body: messageBody('Express'), hooks: t.h })
-    expect(replyEffects(t.replies[0]).destination).toEqual({ serverPoiId: 'poi-express-tickets', local: 'expressDesk' })
+    expect(replyEffects(t.replies[0]).destination).toBe('poi-express-tickets')
 
     await sendChat({ api, sessionId, body: messageBody('All-stop train platform', 'poi-allstop-platform'), hooks: t.h })
     const second = replyEffects(t.replies[1])
     expect(second.view.status).toBe('destination_set')
-    expect(second.destination).toEqual({ serverPoiId: 'poi-allstop-platform', local: 'allstopPlatform' })
+    expect(second.destination).toBe('poi-allstop-platform')
     expect(mockBackend.session(sessionId)?.destinationPoiId).toBe('poi-allstop-platform')
   })
 

@@ -92,7 +92,7 @@ describe('목적지 목록에서 고르기 (MSW)', () => {
     expect(bodies).toEqual([{ message: '일반열차 승강장', selected_poi_id: 'poi-allstop-platform' }])
     const effects = replyEffects(replies[0])
     expect(effects.view.status).toBe('destination_set')
-    expect(effects.destination?.serverPoiId).toBe('poi-allstop-platform')
+    expect(effects.destination).toBe('poi-allstop-platform')
     expect(effects.train).toBe('allstop')
     expect(mockBackend.session(created.session_id)?.destinationPoiId).toBe('poi-allstop-platform')
   })
