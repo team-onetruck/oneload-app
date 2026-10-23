@@ -1601,6 +1601,15 @@ button {
   padding-bottom: calc(var(--safe-bottom) + 8px);
 }
 
+/* ---------- Error notice ---------- */
+
+.recovery-sheet {
+  padding-top: 22px;
+}
+.recovery-sheet .actions .btn {
+  flex: 1 1 auto;
+}
+
 /* ---------- Demo panel ---------- */
 
 .demo-pill {

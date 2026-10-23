@@ -1,7 +1,9 @@
 import { useRecovery } from './features/recovery/context'
 import { RecoveryProvider } from './features/recovery/RecoveryProvider'
 import { AppProvider, useApp } from './store'
-import { Analyzing, Arrived, Candidates, Chat, DemoPanel, Destinations, Locate, Manual, RouteScreen, SessionEnded, Welcome } from './screens'
+import {
+  Analyzing, Arrived, Candidates, Chat, DemoPanel, Destinations, ErrorNotice, Locate, Manual, RouteScreen, SessionEnded, Welcome,
+} from './screens'
 
 const SCREENS = {
   welcome: Welcome,
@@ -26,6 +28,7 @@ function Device() {
       </div>
       {/* 세션이 끝나면 어느 화면에 있었든 세션 종료 화면으로 바꾼다 */}
       {ended ? <SessionEnded key="ended" /> : <Screen key={screen} />}
+      <ErrorNotice />
       <DemoPanel />
     </div>
   )

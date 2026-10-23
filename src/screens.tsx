@@ -10,7 +10,7 @@ import type { Action, Rendered } from './assistant'
 import { NODES, POIS, TRAIN_NAME } from './data'
 import type { Floor, Lang, NodeId, PhotoScenario, Text } from './data'
 import { useRecovery } from './features/recovery/context'
-import type { SessionEndCause } from './features/recovery/recovery'
+import type { NoticeReason, Recovery, RecoveryAction, RelocateReason, SessionEndCause } from './features/recovery/recovery'
 import { UI } from './i18n'
 import { totalMeters } from './route'
 import { useApp } from './store'
@@ -774,6 +774,79 @@ export function SessionEnded() {
   const { ended } = useRecovery()
   if (!ended) return null
   return <SessionEndedView cause={ended.cause} lang={lang} onRestart={reset} />
+}
+
+/* ---------- Error notice ---------- */
+
+// relocate는 위치 확인 화면으로 가는 버튼('locate') 하나를 준다. 그 화면에 다시 찍기와 목록에서 고르기가 있다
+type NoticeButton = RecoveryAction | 'locate'
+type NoticeRecovery = Exclude<Recovery, { type: 'sessionEnded' }>
+
+const NOTICE_TEXT: Record<NoticeReason, Text> = {
+  timeout: UI.errTimeout,
+  network: UI.errNetwork,
+  conflict: UI.errConflict,
+  ai_unavailable: UI.errAiUnavailable,
+  failed: UI.errFailed,
+}
+const RELOCATE_TEXT: Record<RelocateReason, { text: Text; button: Text }> = {
+  location_not_confirmed: { text: UI.errNeedLocation, button: UI.findMe },
+  localization_expired: { text: UI.errPhotoExpired, button: UI.retake },
+}
+const RECOVERY_LABEL: Record<RecoveryAction, Text> = { retry: UI.retry, manual: UI.pickShort, home: UI.newTrip }
+const RECOVERY_ICON: Record<NoticeButton, ReactNode> = {
+  retry: <RefreshCw size={18} />,
+  manual: <List size={18} />,
+  home: <RotateCcw size={18} />,
+  locate: <Camera size={18} />,
+}
+
+function noticeContent(notice: NoticeRecovery): { text: Text; buttons: { id: NoticeButton; label: Text }[] } {
+  if (notice.type === 'relocate') {
+    const { text, button } = RELOCATE_TEXT[notice.reason]
+    return { text, buttons: [{ id: 'locate', label: button }] }
+  }
+  const text = notice.type === 'resync' ? UI.errResync : NOTICE_TEXT[notice.reason]
+  return { text, buttons: notice.actions.map((a) => ({ id: a, label: RECOVERY_LABEL[a] })) }
+}
+
+// 채팅 오류 말풍선과 같은 모양으로 아래에서 올라온다. 닫기 대신 탈출구 버튼 중 하나를 고르게 한다 (제품 원칙 4)
+export function ErrorNoticeView({ notice, lang, onAction }: { notice: NoticeRecovery; lang: Lang; onAction: (action: NoticeButton) => void }) {
+  const { text, buttons } = noticeContent(notice)
+  return (
+    <div className="sheet-backdrop">
+      <section className="sheet recovery-sheet" role="alertdialog" aria-modal="true" aria-labelledby="recovery-text">
+        <div className="msg assistant is-error">
+          <span className="avatar" aria-hidden />
+          <div className="msg-body">
+            <p id="recovery-text">{text[lang]}</p>
+            <div className="actions">
+              {buttons.map((b, i) => (
+                <button key={b.id} className={`btn ${i === 0 ? 'primary' : 'secondary'}`} onClick={() => onAction(b.id)}>
+                  {RECOVERY_ICON[b.id]} {b.label[lang]}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+export function ErrorNotice() {
+  const app = useApp()
+  const recovery = useRecovery()
+  const { notice } = recovery
+  if (!notice) return null
+  const onAction = (action: NoticeButton) => {
+    recovery.clear()
+    if (action === 'retry') notice.retry?.()
+    else if (action === 'manual') notice.manual?.()
+    else if (action === 'locate') app.setScreen('locate')
+    else app.reset()
+  }
+  return <ErrorNoticeView notice={notice} lang={app.lang} onAction={onAction} />
 }
 
 /* ---------- Demo panel ---------- */
