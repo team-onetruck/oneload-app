@@ -2,10 +2,13 @@
 // (idle → needs_clarification → needs_location → needs_confirmation →
 // ready_to_navigate → navigating → arrived) with in-memory mocks.
 // 세션 생성과 채팅은 VITE_API_MODE(기본 http)에 따라 서버 또는 mock 규칙(가짜 세션 서버, assistant.ts)을 쓴다.
-import { createContext, useContext, useLayoutEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { clearSession, createSession, getNavigationState, patchSession, sendMessage } from './api'
-import type { SessionStatus } from './api'
+import {
+  clearSession, confirmLocation as confirmLocationApi, createSession, getMapGraph, getNavigationState, patchSession, postLocalization,
+  sendMessage,
+} from './api'
+import type { GraphOut, NavigationStateOut, SessionStatus } from './api'
 import { API_MODE } from './api/mode'
 import { classify } from './assistant'
 import type { Intent, Reply, Tip } from './assistant'
@@ -16,11 +19,18 @@ import { sendChat } from './features/chat/sendChat'
 import { toErrorView } from './features/chat/toViewModel'
 import type { ChatChip, ChatView, ErrorView } from './features/chat/toViewModel'
 import { compressImage } from './features/localization/compressImage'
+import type { LocationChoice } from './features/localization/confirm'
+import { sendConfirmation, sendPhoto } from './features/localization/flow'
+import type { LocateResult } from './features/localization/locate'
+import { candidateViews, manualPlaces, mockCandidateViews, mockManualPlaces } from './features/localization/views'
+import type { CandidateView, PlaceView } from './features/localization/views'
+import { createGraphCache } from './features/map/graphCache'
 import { useRecovery } from './features/recovery/context'
 import type { FailHandlers } from './features/recovery/context'
 import { sendWithRecovery } from './features/recovery/retry'
 import { patchLanguage } from './features/session/language'
 import { createMockSessionServer } from './features/session/mockSession'
+import { localNodeOf, serverNodeOf } from './features/session/nodeBridge'
 import { serverPoiOf } from './features/session/poiBridge'
 import { findRoute } from './route'
 import type { Step } from './route'
@@ -65,7 +75,12 @@ interface Utterance {
 export interface Photo {
   src: string | null
   scenario: PhotoScenario
+  // 찍거나 고른 원본. http 모드는 이 파일을 압축해 보낸다. 데모 사진(mock 모드)은 없다
+  file?: Blob
 }
+
+// 직접 선택 화면에 온 이유. 사진 인식을 쓸 수 없어(503) 넘어왔으면 안내 한 줄을 보여 준다
+export type ManualReason = 'ai_unavailable' | null
 
 // 서버 세션의 식별 정보. 토큰은 src/api 클라이언트가 보관한다.
 export interface SessionInfo {
@@ -79,6 +94,19 @@ const VISION_DELAY_MS = 1600
 const MAP_ID = 'seoul-station'
 const chatApi = { sendMessage, getNavigationState }
 const sessionApi = { patchSession, getNavigationState }
+const locationApi = { postLocalization, confirmLocation: confirmLocationApi, getNavigationState }
+
+const isNodeId = (id: string): id is NodeId => id in NODES
+
+// 현재 위치(here)를 데모 경로(data.ts)의 노드로 읽는다. http 모드는 서버 node_id라 nodeBridge로 잇는다 (작업 4에서 지운다)
+const localNode = (id: string | null): NodeId | null => {
+  if (id === null) return null
+  if (API_MODE === 'mock') return isNodeId(id) ? id : null
+  return localNodeOf(id)
+}
+
+// 데모 경로의 노드를 현재 위치로 남길 때. http 모드는 서버 node_id로 바꿔 둔다
+const placeOf = (node: NodeId): string => (API_MODE === 'mock' ? node : serverNodeOf(node))
 
 function useAppState() {
   const [lang, setLang] = useState<Lang>('en')
@@ -93,13 +121,20 @@ function useAppState() {
   const [dest, setDest] = useState<PoiId | null>(null)
   // 서버가 정한 목적지 POI id. dest는 데모 경로용으로 이어 붙인 값이다 (poiBridge)
   const [destinationPoiId, setDestinationPoiId] = useState<string | null>(null)
-  const [here, setHere] = useState<NodeId | null>(null)
+  // 현재 위치. http 모드는 서버가 확정한 node_id, mock 모드는 data.ts NodeId
+  const [here, setHere] = useState<string | null>(null)
   const [steps, setSteps] = useState<Step[]>([])
   const [startNode, setStartNode] = useState<NodeId | null>(null)
   const [stepIdx, setStepIdx] = useState(0)
   const [messages, setMessages] = useState<Msg[]>([{ id: 0, role: 'assistant', reply: { kind: 'greet' } }])
   const [photo, setPhoto] = useState<Photo | null>(null)
+  // mock 모드의 데모 후보 (data.ts SCENARIOS)
   const [candidates, setCandidates] = useState<Candidate[]>([])
+  // http 모드: 지도 그래프(직접 선택 목록, 후보 이름, 작업 4의 경로 화면)와 마지막 사진 결과(후보 / 재촬영 / 503 직접 선택)
+  const [graph, setGraph] = useState<GraphOut | null>(null)
+  const [located, setLocated] = useState<LocateResult | null>(null)
+  // 위치 확정 요청을 보내는 중이면 후보·목록 버튼을 잠근다
+  const [confirming, setConfirming] = useState(false)
   const [failNext, setFailNext] = useState(false)
   const [uploadScenario, setUploadScenario] = useState<PhotoScenario>('arexSign')
   const [demoOpen, setDemoOpen] = useState(false)
@@ -110,14 +145,17 @@ function useAppState() {
   const recovery = useRecovery()
   // 초기화 뒤에 도착한 세션 생성 응답을 버리기 위한 번호
   const startSeq = useRef(0)
+  // 다시 찍었거나 초기화한 뒤에 도착한 옛 사진 결과를 버리기 위한 번호
+  const photoSeq = useRef(0)
+  const graphCache = useRef(createGraphCache((mapId) => getMapGraph(mapId)))
   // Handlers read the latest values through this ref so delayed replies
   // never act on a stale render's state.
   const sessionId = sessionInfo?.id ?? null
   const hasRoute = steps.length > 0
   const revision = session?.revision ?? 0
-  const live = useRef({ train, dest, here, failNext, lang, sessionId, hasRoute, revision })
+  const live = useRef({ train, dest, here, failNext, lang, sessionId, sessionInfo, hasRoute, revision, located, confirming })
   useLayoutEffect(() => {
-    live.current = { train, dest, here, failNext, lang, sessionId, hasRoute, revision }
+    live.current = { train, dest, here, failNext, lang, sessionId, sessionInfo, hasRoute, revision, located, confirming }
   })
 
   // 응답의 session을 그대로 반영한다. 늦게 도착한 옛 응답이 더 새 값을 덮지 않도록 revision이 작으면 버린다.
@@ -216,7 +254,7 @@ function useAppState() {
     const { here } = live.current
     setDest(poi)
     mockMove(here ? 'ready_to_navigate' : 'needs_location')
-    reply({ kind: 'destSet', poi, from: here, tip })
+    reply({ kind: 'destSet', poi, from: localNode(here), tip })
   }
 
   const runIntent = (intent: Intent, withPhoto: boolean) => {
@@ -388,9 +426,81 @@ function useAppState() {
     setScreen('route')
   }
 
+  // http 모드: 지도 그래프를 처음 필요할 때 한 번 받는다. 지도마다 한 번만 요청하고 실패하면 오류 알림에서 다시 시도한다
+  const ensureGraph = () => {
+    const { sessionId: sid, sessionInfo: info } = live.current
+    if (API_MODE === 'mock' || !sid || !info) return
+    graphCache.current.get(info.mapId).then(
+      (g) => live.current.sessionId === sid && setGraph(g),
+      (error) => live.current.sessionId === sid && recovery.fail(error, { retry: ensureGraph }),
+    )
+  }
+
+  // 위치 확인 화면들에 들어오면 그래프를 준비한다. 최신 ensureGraph를 ref로 읽어 화면이 바뀔 때만 부른다
+  const loadGraph = useRef(ensureGraph)
+  useLayoutEffect(() => {
+    loadGraph.current = ensureGraph
+  })
+  useEffect(() => {
+    if (screen === 'locate' || screen === 'candidates' || screen === 'manual') loadGraph.current()
+  }, [screen])
+
+  // 409 INVALID_STATE 뒤: 다시 읽은 서버 상태로 맞는 화면에 간다. 채팅으로 가면 채팅과 같은 오류 말풍선과 버튼을 남긴다
+  const resyncTo = (state: NavigationStateOut, error: unknown) => {
+    applySession(state.session)
+    const plan = resyncPlan(state.next_action, live.current.hasRoute)
+    if (plan.screen === 'chat') push({ role: 'assistant', view: { ...toErrorView(error), actions: plan.actions } })
+    setScreen(plan.screen)
+  }
+
+  // http 모드: 사진을 서버 조건(JPEG, 2MB 이하)으로 줄여 보내고, 결과에 맞는 화면으로 간다. 위치는 여기서 확정하지 않는다
+  const locateOnServer = async (file: Blob) => {
+    const { sessionId: sid, sessionInfo: info, here: lastNode } = live.current
+    if (!sid || !info) return setScreen('locate')
+    const seq = ++photoSeq.current
+    const current = () => seq === photoSeq.current && live.current.sessionId === sid
+    setLocated(null)
+    ensureGraph()
+
+    let image: Blob
+    try {
+      image = await compressImage(file)
+    } catch (error) {
+      if (!current()) return
+      setScreen('locate')
+      return recovery.fail(error, { manual: () => setScreen('manual') })
+    }
+
+    await sendPhoto({
+      api: locationApi,
+      req: { sessionId: sid, mapVersion: info.mapVersion, lastNodeId: lastNode },
+      image,
+      hooks: {
+        fail: (error, handlers) => {
+          if (!current()) return
+          setScreen('locate')
+          recovery.fail(error, handlers)
+        },
+        onSuccess: (result) => {
+          if (!current()) return
+          setLocated(result)
+          // 503: 사진 인식을 쓸 수 없다. 위치를 추측하지 않고 목록에서 고르게 한다 (서버 세션은 그대로)
+          if (result.kind === 'manual') return setScreen('manual')
+          applySession(result.session)
+          setScreen('candidates')
+        },
+        onInvalidState: (state, error) => current() && resyncTo(state, error),
+        onRetry: () => current() && setScreen('analyzing'),
+        manual: () => setScreen('manual'),
+      },
+    })
+  }
+
   const analyzePhoto = (p: Photo) => {
     setPhoto(p)
     setScreen('analyzing')
+    // 모드 분기는 여기 한 곳이다. http 모드는 데모 사진(파일 없음)을 보여 주지 않는다
+    if (API_MODE === 'http') return p.file ? void locateOnServer(p.file) : setScreen('locate')
     setTimeout(() => {
       const found = SCENARIOS[p.scenario]
       setCandidates(found)
@@ -399,11 +509,58 @@ function useAppState() {
     }, VISION_DELAY_MS)
   }
 
+  // http 모드: 사용자가 고른 위치를 확정한다. 409 REVISION_CONFLICT면 다시 맞춰 한 번 더 보내고, 응답의 session·location을 쓴다
+  const confirmOnServer = (choice: LocationChoice) => {
+    const sid = live.current.sessionId
+    if (!sid || live.current.confirming) return
+    const current = () => live.current.sessionId === sid
+    setConfirming(true)
+    void sendConfirmation({
+      api: locationApi,
+      sessionId: sid,
+      choice,
+      revision: live.current.revision,
+      onResync: (state) => current() && applySession(state.session),
+      hooks: {
+        fail: (error, handlers) => {
+          setConfirming(false)
+          if (current()) recovery.fail(error, handlers)
+        },
+        onSuccess: (out) => {
+          setConfirming(false)
+          if (!current()) return
+          applySession(out.session)
+          setHere(out.location.node_id)
+          setLocated(null)
+          // 목적지가 있으면 길안내로 간다. 경로는 작업 4 전까지 데모 경로(findRoute)다
+          const node = localNode(out.location.node_id)
+          if (live.current.dest && node) startRoute(node)
+          else setScreen('chat')
+        },
+        onInvalidState: (state, error) => {
+          setConfirming(false)
+          if (current()) resyncTo(state, error)
+        },
+        onRetry: () => setConfirming(true),
+        manual: () => setScreen('manual'),
+      },
+    })
+  }
+
   // Location is confirmed only by an explicit user choice, never by the top candidate alone.
-  const confirmLocation = (node: NodeId) => {
-    setHere(node)
+  // from: 'photo'는 후보 화면, 'list'는 직접 선택 목록에서 누른 것이다
+  const confirmLocation = (nodeId: string, from: 'photo' | 'list' = 'list') => {
+    if (API_MODE === 'http') {
+      const shot = live.current.located
+      if (from === 'list') return confirmOnServer({ method: 'manual', nodeId })
+      const candidate = shot?.kind === 'candidates' ? shot.candidates.find((c) => c.node_id === nodeId) : undefined
+      if (shot?.kind === 'candidates' && candidate) confirmOnServer({ method: 'photo_candidate', localizationId: shot.localizationId, candidate })
+      return
+    }
+    if (!isNodeId(nodeId)) return
+    setHere(nodeId)
     mockMove('ready_to_navigate')
-    if (live.current.dest) startRoute(node)
+    if (live.current.dest) startRoute(nodeId)
     else setScreen('chat')
   }
 
@@ -411,7 +568,7 @@ function useAppState() {
     if (stepIdx + 1 < steps.length) return setStepIdx(stepIdx + 1)
     const arrivedAt = steps.length ? steps[steps.length - 1].edge.to : startNode
     setStepIdx(steps.length)
-    setHere(arrivedAt)
+    setHere(arrivedAt && placeOf(arrivedAt))
     mockMove('arrived')
     setScreen('arrived')
   }
@@ -439,6 +596,11 @@ function useAppState() {
     setMessages([{ id: 0, role: 'assistant', reply: { kind: 'greet' } }])
     setPhoto(null)
     setCandidates([])
+    photoSeq.current++
+    graphCache.current.clear()
+    setGraph(null)
+    setLocated(null)
+    setConfirming(false)
     setFailNext(false)
     setDemoOpen(false)
     // 세션 종료 화면의 '다시 시작', 오류 알림의 '처음으로', 데모 초기화가 모두 여기로 온다
@@ -450,9 +612,20 @@ function useAppState() {
   // 서버 상태 대신 화면에 진행 중인 경로가 있는지로 판단한다.
   const routeActive = API_MODE === 'mock' ? session?.state === 'navigating' : here !== null && stepIdx < steps.length
 
+  // 후보·직접 선택 화면이 보는 목록. http 모드는 서버 후보와 지도 그래프(받는 중이면 null), mock 모드는 data.ts
+  const candidateList: CandidateView[] =
+    API_MODE === 'mock' ? mockCandidateViews(candidates) : located?.kind === 'candidates' ? candidateViews(located.candidates, graph) : []
+  const retakeHint = API_MODE === 'http' && located?.kind === 'no_match' ? located.retakeHint : null
+  // 마지막 사진이 503이었으면 직접 선택 화면에 안내 한 줄을 보여 준다. 다시 찍거나 확정하면 지워진다
+  const manualReason: ManualReason = located?.kind === 'manual' ? located.reason : null
+  const manualList: PlaceView[] | null = API_MODE === 'mock' ? mockManualPlaces() : graph ? manualPlaces(graph) : null
+  // 데모 사진과 업로드 결과 스위치는 서버로 보낼 파일이 없어 mock 모드에서만 쓴다
+  const demoPhotos = API_MODE === 'mock'
+
   return {
     lang, setLang, changeLang, langPending, screen, setScreen, session, sessionInfo, applySession, starting, startSession, routeActive,
-    train, dest, destinationPoiId, here, steps, startNode, stepIdx, messages, photo, candidates,
+    train, dest, destinationPoiId, here, hereNode: localNode(here), steps, startNode, stepIdx, messages, photo,
+    graph, ensureGraph, candidateList, retakeHint, manualList, manualReason, confirming, demoPhotos,
     failNext, setFailNext, uploadScenario, setUploadScenario, demoOpen, setDemoOpen,
     sendText, sendChip, sendSuggested, retry, pickDestination, startRoute, analyzePhoto, confirmLocation, nextStep, reportLost, reset,
   }

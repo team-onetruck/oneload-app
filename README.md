@@ -2,7 +2,7 @@
 
 Clickable, phone-sized prototype of the Hangil demo client for the Seoul Station / AREX scenario: a foreign visitor who doesn't know how tickets, transit cards and cash work, gets to the right ticket point and platform.
 
-**연결 상태 (2026-10-23, #12 기준).** `VITE_API_MODE`로 mock 모드와 http 모드를 고른다. mock 모드는 서버를 부르지 않고 브라우저 안의 데모 규칙으로 동작한다. http 모드(기본)에서는 세션 생성, 채팅, 언어 전환이 서버로 동작하고, 사진 위치 인식·위치 확정·경로 안내는 아직 브라우저 안의 데모 데이터로 동작한다(작업 3·4에서 연결 중이며, 머지 후 이 문장을 갱신한다). 기능별 상태는 [백엔드 연결](#백엔드-연결-vite_api_mode) 표를 본다.
+**연결 상태 (2026-10-23, 작업 3 반영).** `VITE_API_MODE`로 mock 모드와 http 모드를 고른다. mock 모드는 서버를 부르지 않고 브라우저 안의 데모 규칙으로 동작한다. http 모드(기본)에서는 세션 생성, 채팅, 언어 전환, 사진 위치 인식, 위치 확정이 서버로 동작하고, 경로 안내는 아직 브라우저 안의 데모 데이터로 동작한다(작업 4에서 연결 중이며, 머지 후 이 문장을 갱신한다). 기능별 상태는 [백엔드 연결](#백엔드-연결-vite_api_mode) 표를 본다.
 
 - Floors of AREX ticket points (B2 express, B3 all-stop) and platforms (B7) follow the [AREX official guide](https://www.airportrailroad.com/co/steUsfGud.do), checked 2026-10-22.
 - Passages, distances, sign wording and "demo doc" sources are placeholders until the field survey.
@@ -41,14 +41,14 @@ http 모드의 기능별 상태 (`src/store.tsx` 기준):
 | 목적지 목록에서 고르기 | 서버 연결됨 | 목록은 앱 데이터(`data.ts`)이고, 고른 목적지는 `selected_poi_id`로 `/messages`에 보낸다 |
 | "길을 잃었어요" | 서버 연결됨 | 문장을 `/messages`로 보내고 위치 확인 화면으로 넘어간다 |
 | 언어 전환 (세션 시작 후) | 서버 연결됨 | `PATCH /sessions/{id}`. `409 REVISION_CONFLICT`면 navigation-state로 맞춘 뒤 한 번 다시 보낸다. 세션 전에는 화면 언어만 바꾼다 |
-| 사진으로 위치 찾기 | 로컬 (연결 진행 중, 작업 3) | 데모 패널에서 고른 결과(`data.ts`의 `SCENARIOS`)를 보여 준다. `/localizations`를 부르지 않는다 |
-| 위치 확정 | 로컬 (연결 진행 중, 작업 3) | 화면 상태만 바꾼다. `/location-confirmations`를 부르지 않는다 |
+| 사진으로 위치 찾기 | 서버 연결됨 | JPEG 2MB 이하로 줄여 `POST /sessions/{id}/localizations`로 보낸다. 후보는 근거와 함께 보여 주고 저절로 확정하지 않는다. 후보가 없으면 서버의 `retake_hint`를, `503 AI_SERVICE_UNAVAILABLE`(지금 서버의 `NoVision`)이면 직접 선택 화면을 보여 준다. 데모 사진은 mock 모드에서만 보인다 |
+| 위치 확정 | 서버 연결됨 | 사용자가 누른 후보(`photo_candidate`)나 목록 항목(`manual`)만 `POST /sessions/{id}/location-confirmations`로 보낸다. `409 REVISION_CONFLICT`면 navigation-state로 맞춘 뒤 한 번 다시 보낸다. 직접 선택 목록은 `GET /maps/{id}/graph`의 노드 전체다 |
 | 경로 안내 | 로컬 (연결 진행 중, 작업 4) | `route.ts`가 `data.ts`의 통로로 계산한다. `/routes`를 부르지 않는다 |
 | 안내 시작·도착 | 로컬 (연결 진행 중, 작업 4) | `/navigation-events`를 보내지 않는다 |
 | 처음으로 (초기화) | 로컬 | 보관한 세션 토큰만 지운다. 서버 세션은 2시간 동안 요청이 없으면 만료된다 |
 
-http 모드에서 위치·경로 단계는 서버에 알리지 않으므로 서버 세션 상태(데모 패널의 state·rev)도 바뀌지 않는다.
-`src/features/localization`, `src/features/route`에는 사진·확정·경로·이벤트용 요청 함수가 있지만 아직 화면에서 쓰지 않는다.
+http 모드에서 경로 단계는 아직 서버에 알리지 않으므로 길안내 중에는 서버 세션 상태(데모 패널의 state·rev)가 바뀌지 않는다. 위치를 확정한 뒤의 경로는 서버가 확정한 노드에서 시작하는 데모 경로다(`src/features/session/nodeBridge.ts`, 작업 4에서 지운다).
+`src/features/route`에는 경로·이벤트용 요청 함수가 있지만 아직 화면에서 쓰지 않는다.
 
 | 환경변수 | 기본값 | 쓰는 곳 |
 | --- | --- | --- |

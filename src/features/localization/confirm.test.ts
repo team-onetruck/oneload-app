@@ -68,5 +68,19 @@ describe('confirmChosenLocation', () => {
     expect(calls[0].init.method).toBe('POST')
     expect(JSON.parse(calls[0].init.body as string)).toEqual({ expected_revision: 3, method: 'manual', selected_node_id: 'ktx-hall' })
     expect(out.session).toEqual({ state: 'ready_to_navigate', revision: 5 })
+    expect(new Headers(calls[0].init.headers).get('Idempotency-Key')).toBe('key-1')
+  })
+
+  it('다시 시도할 때 넘긴 처음 요청의 Idempotency-Key로 보낸다', async () => {
+    const keys: string[] = []
+    const fetch: FetchLike = async (_url, init) => {
+      keys.push(new Headers(init.headers).get('Idempotency-Key') ?? '')
+      return new Response(JSON.stringify(CONFIRMED), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+    const client = createApiClient({ baseUrl: '/api/v1', fetch, storage: null, newIdempotencyKey: () => 'key-new' })
+    client.setSession({ sessionId: 'ses_1', token: 'tok_1' })
+
+    await confirmChosenLocation(createHttpAdapter(client), 'ses_1', { method: 'manual', nodeId: 'ktx-hall' }, 3, { idempotencyKey: 'key-first' })
+    expect(keys).toEqual(['key-first'])
   })
 })

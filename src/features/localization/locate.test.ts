@@ -8,7 +8,7 @@ import { createApiClient } from '../../api/client'
 import type { FetchLike } from '../../api/client'
 import { createHttpAdapter } from '../../api/httpAdapter'
 import type { LocalizationOut } from '../../api/types'
-import { locateFromPhoto, toLocateResult } from './locate'
+import { locateFromPhoto, requestLocalization, toLocateResult } from './locate'
 
 const MAP_VERSION = '2026-10-22.1'
 const PHOTO = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], { type: 'image/jpeg' })
@@ -98,6 +98,24 @@ describe('locateFromPhoto', () => {
     const server = fakeServer(200, NO_MATCH)
     const result = await locateFromPhoto(server.api, { sessionId: 'ses_1', mapVersion: MAP_VERSION }, PHOTO, noCompress)
     expect(result).toEqual({ kind: 'no_match', retakeHint: NO_MATCH.retake_hint, session: NO_MATCH.session })
+  })
+})
+
+describe('requestLocalization', () => {
+  it('이미 압축한 사진을 그대로 보내고, 넘긴 Idempotency-Key를 쓴다', async () => {
+    const server = fakeServer(200, CANDIDATES)
+    await requestLocalization(server.api, { sessionId: 'ses_1', mapVersion: MAP_VERSION }, PHOTO, { idempotencyKey: 'key-first' })
+
+    const { init } = server.calls[0]
+    expect(new Headers(init.headers).get('Idempotency-Key')).toBe('key-first')
+    expect((init.body as FormData).get('image')).toBeInstanceOf(Blob)
+    expect(((init.body as FormData).get('image') as Blob).size).toBe(PHOTO.size)
+  })
+
+  it('키를 넘기지 않으면 클라이언트가 새 키를 만든다', async () => {
+    const server = fakeServer(200, CANDIDATES)
+    await requestLocalization(server.api, { sessionId: 'ses_1', mapVersion: MAP_VERSION }, PHOTO)
+    expect(new Headers(server.calls[0].init.headers).get('Idempotency-Key')).toBe('key-1')
   })
 })
 

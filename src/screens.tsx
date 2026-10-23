@@ -8,8 +8,9 @@ import { API_MODE } from './api/mode'
 import { render } from './assistant'
 import type { Rendered } from './assistant'
 import { NODES, POIS, TRAIN_NAME } from './data'
-import type { Floor, Lang, NodeId, PhotoScenario, Text } from './data'
+import type { Lang, NodeId, PhotoScenario, Text } from './data'
 import type { ChatAction, ChatSource, ChatView, ErrorReason } from './features/chat/toViewModel'
+import type { PlaceView } from './features/localization/views'
 import { useRecovery } from './features/recovery/context'
 import type { NoticeReason, Recovery, RecoveryAction, RelocateReason, SessionEndCause } from './features/recovery/recovery'
 import { UI } from './i18n'
@@ -38,9 +39,13 @@ function LangToggle({ onDark = false }: { onDark?: boolean }) {
   )
 }
 
-function FloorBadge({ floor }: { floor: Floor }) {
+// 서버 floor_id(string)와 데모 Floor를 함께 받는다
+function FloorBadge({ floor }: { floor: string }) {
   return <span className="floor">{floor}</span>
 }
+
+// 장소 이름. 그래프에 없는 노드는 이름을 지어내지 않고 node id를 그대로 보여 준다
+const placeName = (place: PlaceView, lang: Lang) => place.name?.[lang] ?? place.nodeId
 
 function TopBar({ title, onBack, right }: { title?: ReactNode; onBack?: () => void; right?: ReactNode }) {
   return (
@@ -262,7 +267,7 @@ function AssistantMsg({ m, latest }: { m: Msg; latest: boolean }) {
   const doAction = (a: ChatAction) => {
     if (a === 'findMe' || a === 'retake') app.setScreen('locate')
     if (a === 'pickLocation') app.setScreen('manual')
-    if (a === 'startRoute' && app.here) app.startRoute(app.here)
+    if (a === 'startRoute' && app.hereNode) app.startRoute(app.hereNode)
     if (a === 'retry') app.retry()
     if (a === 'pickDest') app.setScreen('destinations')
     if (a === 'restart') app.reset()
@@ -446,19 +451,23 @@ export function Locate() {
         <Camera size={20} /> {UI.takePhoto[lang]}
         <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => {
           const f = e.target.files?.[0]
-          if (f) app.analyzePhoto({ src: URL.createObjectURL(f), scenario: app.uploadScenario })
+          if (f) app.analyzePhoto({ src: URL.createObjectURL(f), scenario: app.uploadScenario, file: f })
           e.target.value = ''
         }} />
       </label>
-      <p className="label pad">{UI.demoPhotos[lang]}</p>
-      <div className="demo-photos">
-        {DEMO_PHOTOS.map((p) => (
-          <button key={p.id} className="demo-photo" onClick={() => app.analyzePhoto({ src: null, scenario: p.id })}>
-            <DemoSign scenario={p.id} />
-            <span>{p.label[lang]}</span>
-          </button>
-        ))}
-      </div>
+      {app.demoPhotos && (
+        <>
+          <p className="label pad">{UI.demoPhotos[lang]}</p>
+          <div className="demo-photos">
+            {DEMO_PHOTOS.map((p) => (
+              <button key={p.id} className="demo-photo" onClick={() => app.analyzePhoto({ src: null, scenario: p.id })}>
+                <DemoSign scenario={p.id} />
+                <span>{p.label[lang]}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       <button className="btn ghost block" onClick={() => app.setScreen('manual')}>
         <List size={18} /> {UI.pickOnList[lang]}
       </button>
@@ -492,7 +501,7 @@ export function Analyzing() {
 
 export function Candidates() {
   const app = useApp()
-  const { lang, candidates } = app
+  const { lang, candidateList: candidates } = app
   if (!candidates.length)
     return (
       <main className="screen candidates">
@@ -502,7 +511,8 @@ export function Candidates() {
             <PhotoView />
           </div>
           <h2 className="title">{UI.noMatchTitle[lang]}</h2>
-          <p className="muted">{UI.noMatchBody[lang]}</p>
+          {/* 서버의 재촬영 안내(retake_hint)를 그대로 쓴다. mock 모드는 기본 문구 */}
+          <p className="muted">{app.retakeHint ?? UI.noMatchBody[lang]}</p>
         </div>
         <div className="stack pad">
           <button className="btn primary block" onClick={() => app.setScreen('locate')}>
@@ -527,20 +537,26 @@ export function Candidates() {
       </div>
       <ol className="cand-list">
         {candidates.map((c, i) => (
-          <li key={c.node} className={`cand ${i === 0 ? 'top' : ''}`}>
+          <li key={c.nodeId} className={`cand ${i === 0 ? 'top' : ''}`}>
             <span className="cand-ring" aria-hidden />
             <div className="cand-body">
               <p className="cand-rank">{i === 0 ? UI.bestMatch[lang] : UI.otherMatch[lang]}</p>
               <h3>
-                {NODES[c.node].name[lang]} <FloorBadge floor={NODES[c.node].floor} />
+                {placeName(c, lang)} <FloorBadge floor={c.floor} />
               </h3>
               <p className="cand-saw">{UI.saw[lang]}</p>
               <ul>
-                {c.evidence.map((e) => (
-                  <li key={e.en}>{e[lang]}</li>
+                {/* 서버 근거는 세션 언어 문자열, 데모 근거는 두 언어 Text */}
+                {c.evidence.map((e, j) => (
+                  <li key={j}>{typeof e === 'string' ? e : e[lang]}</li>
                 ))}
               </ul>
-              <button className={`btn ${i === 0 ? 'primary' : 'secondary'}`} onClick={() => app.confirmLocation(c.node)}>
+              {/* 상위 후보도 저절로 확정하지 않는다. 사용자가 누른 후보만 확정한다 */}
+              <button
+                className={`btn ${i === 0 ? 'primary' : 'secondary'}`}
+                disabled={app.confirming}
+                onClick={() => app.confirmLocation(c.nodeId, 'photo')}
+              >
                 <Check size={18} /> {UI.imHere[lang]}
               </button>
             </div>
@@ -564,25 +580,31 @@ export function Candidates() {
 
 /* ---------- Lists ---------- */
 
-const START_NODES: NodeId[] = ['ktxHall', 'l1gate', 'l4gate', 'concourse', 'expressDesk', 'machines']
-
+// http 모드는 지도 그래프의 노드 전체, mock 모드는 데모 출발지 목록이다 (store.manualList)
 export function Manual() {
   const app = useApp()
-  const { lang } = app
+  const { lang, manualList } = app
   return (
     <main className="screen list-screen">
       <TopBar onBack={() => app.setScreen('locate')} title={UI.manualTitle[lang]} />
-      <ul className="rows">
-        {START_NODES.map((n) => (
-          <li key={n}>
-            <button className="row" onClick={() => app.confirmLocation(n)}>
-              <span className="ring" aria-hidden />
-              <span className="row-name">{NODES[n].name[lang]}</span>
-              <FloorBadge floor={NODES[n].floor} />
-            </button>
-          </li>
-        ))}
-      </ul>
+      {app.manualReason === 'ai_unavailable' && <p className="muted pad">{UI.manualAiUnavailable[lang]}</p>}
+      {manualList ? (
+        <ul className="rows">
+          {manualList.map((p) => (
+            <li key={p.nodeId}>
+              <button className="row" disabled={app.confirming} onClick={() => app.confirmLocation(p.nodeId)}>
+                <span className="ring" aria-hidden />
+                <span className="row-name">{placeName(p, lang)}</span>
+                <FloorBadge floor={p.floor} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted center" role="status">
+          {UI.loadingPlaces[lang]}
+        </p>
+      )}
     </main>
   )
 }
@@ -765,7 +787,8 @@ export function RouteScreen() {
 
 export function Arrived() {
   const app = useApp()
-  const { lang, here } = app
+  // 데모 경로의 도착 노드 (http 모드는 서버 node_id를 nodeBridge로 이은 값)
+  const { lang, hereNode: here } = app
   const [rating, setRating] = useState(0)
   if (!here) return null
   const atTickets = here === 'expressDesk' || here === 'machines'
@@ -965,14 +988,19 @@ export function DemoPanel() {
               <input type="checkbox" checked={app.failNext} onChange={(e) => app.setFailNext(e.target.checked)} />
               <span>{UI.failNext[lang]}</span>
             </label>
-            <p className="label">{UI.uploadResult[lang]}</p>
-            <div className="seg">
-              {DEMO_PHOTOS.map((p) => (
-                <button key={p.id} aria-pressed={app.uploadScenario === p.id} onClick={() => app.setUploadScenario(p.id)}>
-                  {p.label[lang]}
-                </button>
-              ))}
-            </div>
+            {/* 올린 사진의 결과를 고르는 스위치는 mock 모드에서만 의미가 있다. http 모드는 서버가 정한다 */}
+            {app.demoPhotos && (
+              <>
+                <p className="label">{UI.uploadResult[lang]}</p>
+                <div className="seg">
+                  {DEMO_PHOTOS.map((p) => (
+                    <button key={p.id} aria-pressed={app.uploadScenario === p.id} onClick={() => app.setUploadScenario(p.id)}>
+                      {p.label[lang]}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             <button className="btn secondary block" onClick={app.reset}>
               <RefreshCw size={18} /> {UI.reset[lang]}
             </button>
