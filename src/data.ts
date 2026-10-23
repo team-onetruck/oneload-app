@@ -93,14 +93,15 @@ export interface Poi {
   id: PoiId
   node: NodeId
   train: TrainType
-  category: Text
+  // 서버 POI의 category와 같은 값 (tickets, platform). 화면 이름은 features/map/destinations.ts의 categoryText
+  category: string
 }
 
 export const POIS: Poi[] = [
-  { id: 'expressDesk', node: 'expressDesk', train: 'express', category: { en: 'Tickets', ko: '승차권' } },
-  { id: 'machines', node: 'machines', train: 'allstop', category: { en: 'Tickets', ko: '승차권' } },
-  { id: 'expressPlatform', node: 'expressPlatform', train: 'express', category: { en: 'Platform', ko: '승강장' } },
-  { id: 'allstopPlatform', node: 'allstopPlatform', train: 'allstop', category: { en: 'Platform', ko: '승강장' } },
+  { id: 'expressDesk', node: 'expressDesk', train: 'express', category: 'tickets' },
+  { id: 'machines', node: 'machines', train: 'allstop', category: 'tickets' },
+  { id: 'expressPlatform', node: 'expressPlatform', train: 'express', category: 'platform' },
+  { id: 'allstopPlatform', node: 'allstopPlatform', train: 'allstop', category: 'platform' },
 ]
 
 export const TRAIN_NAME: Record<TrainType, Text> = {

@@ -2,7 +2,7 @@
 
 Clickable, phone-sized prototype of the Hangil demo client for the Seoul Station / AREX scenario: a foreign visitor who doesn't know how tickets, transit cards and cash work, gets to the right ticket point and platform.
 
-**연결 상태 (2026-10-23, #17 기준).** `VITE_API_MODE`로 mock 모드와 http 모드를 고른다. mock 모드는 서버를 부르지 않고 브라우저 안의 데모 규칙으로 동작한다. http 모드(기본)에서는 세션 생성, 채팅, 언어 전환, 사진 위치 인식, 위치 확정, 경로 안내, 안내 시작·도착·취소가 서버로 동작한다. 목적지 목록은 아직 앱 데이터(`data.ts`)를 보여 주고 고른 목적지만 서버로 보낸다(서버 목록 연결은 진행 중). 기능별 상태는 [백엔드 연결](#백엔드-연결-vite_api_mode) 표를 본다.
+**연결 상태 (2026-10-23, #19 기준).** `VITE_API_MODE`로 mock 모드와 http 모드를 고른다. mock 모드는 서버를 부르지 않고 브라우저 안의 데모 규칙으로 동작한다. http 모드(기본)에서는 세션 생성, 채팅, 언어 전환, 목적지 목록, 사진 위치 인식, 위치 확정, 경로 안내, 안내 시작·도착·취소가 서버로 동작한다. 기능별 상태는 [백엔드 연결](#백엔드-연결-vite_api_mode) 표를 본다.
 
 - Floors of AREX ticket points (B2 express, B3 all-stop) and platforms (B7) follow the [AREX official guide](https://www.airportrailroad.com/co/steUsfGud.do), checked 2026-10-22.
 - Passages, distances, sign wording and "demo doc" sources are placeholders until the field survey.
@@ -39,7 +39,7 @@ http 모드의 기능별 상태 (`src/store.tsx` 기준):
 | --- | --- | --- |
 | 세션 시작 ("Start") | 서버 연결됨 | `POST /sessions` |
 | 채팅 (입력, 칩, 추천 답변) | 서버 연결됨 | `POST /sessions/{id}/messages`. 답변·목록·출처와 `unverified_notes`("Not verified", 한국어 화면은 "확인되지 않음")는 서버 응답을 표시한다. 사진을 붙이면 JPEG 2MB 이하로 줄여 multipart로 보낸다. 지금 단계에서 할 수 없는 요청(`INVALID_STATE`)이면 `GET /sessions/{id}/navigation-state`로 상태를 다시 읽는다 |
-| 목적지 목록에서 고르기 | 서버 연결됨 | 목록은 앱 데이터(`data.ts`)이고, 고른 목적지는 `selected_poi_id`로 `/messages`에 보낸다 |
+| 목적지 목록에서 고르기 | 서버 연결됨 | 목록은 `GET /maps/{id}/pois`를 지도마다 한 번 받아 이름(한·영), 분류, 열차, 층을 보여 주고, `verified: false`면 "확인되지 않음"을 붙인다(지금 서버는 확인된 장소만 돌려준다). 고른 서버 `poi_id`를 그대로 `selected_poi_id`로 `/messages`에 보낸다 |
 | "길을 잃었어요" | 서버 연결됨 | 문장을 `/messages`로 보내고(서버는 확정 위치만 지우고 목적지·경로는 남긴다) 위치 확인 화면으로 넘어간다. 위치를 다시 확정하면 `GET /sessions/{id}/navigation-state`로 확인한 뒤 같은 목적지를 `reroute: true`로 다시 계산한다 |
 | 언어 전환 (세션 시작 후) | 서버 연결됨 | `PATCH /sessions/{id}`. `409 REVISION_CONFLICT`면 navigation-state로 맞춘 뒤 한 번 다시 보낸다. 세션 전에는 화면 언어만 바꾼다 |
 | 사진으로 위치 찾기 | 서버 연결됨 | JPEG 2MB 이하로 줄여 `POST /sessions/{id}/localizations`로 보낸다. 후보는 근거와 함께 보여 주고 저절로 확정하지 않는다. 후보가 없으면 서버의 `retake_hint`를, `503 AI_SERVICE_UNAVAILABLE`(지금 서버의 `NoVision`)이면 직접 선택 화면을 보여 준다. 데모 사진은 mock 모드에서만 보인다 |
@@ -49,7 +49,7 @@ http 모드의 기능별 상태 (`src/store.tsx` 기준):
 | 처음으로 (초기화) | 로컬 | 안내 중이면 `navigation_cancelled`를 보낸 뒤 보관한 세션 토큰을 지운다. 서버 세션은 2시간 동안 요청이 없으면 만료된다 |
 
 '다음' 버튼은 화면의 단계만 넘기고 서버를 부르지 않는다. 서버 세션 상태(데모 패널의 state·rev)는 경로와 안내 이벤트 응답으로 바뀐다.
-목적지 목록은 아직 앱 데이터(`data.ts`)라서, 고른 목적지를 `src/features/session/poiBridge.ts`로 서버 POI id로 바꿔 보낸다.
+목적지는 서버 `poi_id` 하나로 다룬다(데모 `data.ts`의 목적지 id는 mock 모드에서만 쓴다). 도착 화면의 "표 사는 법" 버튼은 목적지 POI의 `category`가 `tickets`인지로 정한다.
 
 | 환경변수 | 기본값 | 쓰는 곳 |
 | --- | --- | --- |
