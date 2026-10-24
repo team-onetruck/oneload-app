@@ -102,10 +102,7 @@ app (React, 브라우저)                                    backend (FastAPI /a
 
 | 요소 | 위치 | 역할 |
 | --- | --- | --- |
-| 프로젝트 규칙 | `CLAUDE.md` | 작성 규칙, API 규칙, 작업 목록 |
-| 훅 | `.claude/settings.json` | 편집 후 lint + 타입체크, 종료 전 `pnpm verify` |
-| 검증 | `pnpm verify` | 헤더 검사 + lint + 타입체크 + vitest |
-| 헤더 검사 | `scripts/check-header.mjs` | 새 파일의 Date / Author / Purpose 확인 |
+| 검증 | `pnpm verify` | lint + 타입체크 + vitest |
 | 타입 생성 | `scripts/gen-api.mjs` (`pnpm gen:api`) | 백엔드 OpenAPI 문서로 `src/api/schema.d.ts` 생성 |
 | 백엔드 흉내 | `src/test/handlers.ts` (MSW) | vitest와 http 모드 E2E가 같이 쓰는 `/api/v1` 핸들러. 409·503·타임아웃 스위치 |
 | E2E | `playwright.config.ts`, `e2e/` (`pnpm e2e`) | 서버 하나(4180)에서 모바일 http·desktop 프로젝트. 예전 데모 진입 차단, 서버 연동 시나리오와 카메라 안내를 MSW 응답으로 검증 |

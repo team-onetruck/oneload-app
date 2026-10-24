@@ -20,7 +20,7 @@ Purpose: 데모 진입 제거와 서버 연결 단일화의 수정 위치·이�
 | `src/i18n.ts` | 모드별 문구 선택과 모드 배지 문구 제거. 카메라 탭의 Live/라이브를 Camera/카메라로 변경 | 한국어·영어 화면 모두에서 버전 구분을 없애고 카메라 기능을 쉽게 설명 |
 | `src/liveview.tsx`, `src/styles.css` | 센서 디버그 표시와 데모 전용 스타일 제거 | 사용자에게 개발용 수치와 데모 장식을 보여 주지 않음 |
 | `playwright.config.ts`, `e2e/` | 데모 전용 E2E 제거. 카메라 E2E를 HTTP 경로로 이전. 모바일·데스크톱 진입 검사 추가 | 제거된 데모 대신 유지할 서버 연결 흐름과 과거 진입점의 동작을 검증 |
-| `README.md`, `CLAUDE.md`, `docs/architecture.md`, `docs/ci-cd.md` | 실행 방법과 구조·검증 범위 갱신 | 예전 설정을 따라 데모를 실행하려는 혼선 방지 |
+| `README.md`, `docs/architecture.md`, `docs/ci-cd.md` | 실행 방법과 구조·검증 범위 갱신 | 예전 설정을 따라 데모를 실행하려는 혼선 방지 |
 
 테스트용 `src/api/mockAdapter.ts`와 기존 단위 테스트는 유지한다. 이 파일은 앱의 API 진입점에서 가져오지 않으므로 사용자 앱의 실행 모드로 선택되지 않는다. 데모 정책을 선택하던 단위 테스트는 해당 구현과 함께 제거했다.
 
@@ -55,10 +55,12 @@ E2E 응답은 MSW로 재현한다. 실제 배포 서버의 가동 상태, 실제
 - `pnpm build`: 통과.
 - `pnpm exec tsc -p e2e/tsconfig.json`: 통과.
 - `pnpm test:e2e --workers=2`: 20개 통과. Windows에서 자동 종료가 지연된 테스트용 Vite 서버는 프로세스 경로를 확인한 뒤 종료했다.
-- `git diff --check`, 신규 파일 헤더 검사: 통과.
+- `git diff --check`: 통과.
 - 기본 `pnpm verify`: 445개 중 444개 통과. 수정하지 않은 `src/features/session/languages.test.ts` 1개는 이 PC의 Node 24가 `navigator.language=ko-KR`를 제공해 실패했다. `detectDeviceLang(undefined)`는 기본 인자를 적용하므로 브라우저 언어를 읽는데, 기존 테스트는 영어를 기대한다.
 - `$env:NODE_OPTIONS='--no-experimental-global-navigator'`를 설정한 PowerShell 프로세스에서 `pnpm verify`: 헤더·lint·타입 검사와 단위 테스트 445개 모두 통과. 이 설정은 해당 검증 프로세스에만 적용했으며 앱의 언어 감지 코드는 수정하지 않았다.
 
 테스트 응답은 MSW로 재현했다. 실제 운영 서버 검증과 배포는 수행하지 않았다.
 
 이후 실제 로컬 프론트·FastAPI·PostgreSQL 연동도 확인했다. 결과와 화면 7장, 재실행·배포 절차는 [로컬 연동 확인 보고](local-integration-review.md)를 본다.
+
+2026-10-25 최신 main 통합 후에는 기본 `pnpm verify`로 498개 테스트와 빌드·E2E 타입 검사가 통과했다. 기존 언어 감지 테스트의 Node 환경 의존은 main에서 테스트 환경을 명시하도록 수정돼 추가 환경변수 없이 검증할 수 있다.

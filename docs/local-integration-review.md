@@ -83,9 +83,10 @@ docker compose -p oneload-local-review -f compose.yaml -f C:/Users/Public/Docume
 
 - 작업 브랜치: `refactor/server-only-20261024`.
 - 별도 worktree: `../oneload-app-server-only`. 원래 공유 폴더의 미커밋 변경은 보존했다.
-- 로컬 검증: 작업 worktree에서 프로덕션 빌드, 실제 API 연동 흐름과 Playwright 20개 통과. 단위 테스트는 [서버 연결 단일화 문서](server-only.md)의 Node 환경 설정을 적용하면 445개 통과.
+- 로컬 검증: 작업 worktree에서 프로덕션 빌드, 실제 API 연동 흐름과 Playwright 20개 통과. 최신 main 통합 후 기본 `pnpm verify`로 498개 테스트가 통과했다. 초기 검증의 Node 언어 설정 이슈와 이후 결과는 [서버 연결 단일화 문서](server-only.md)를 본다.
 - 연결된 GitHub 계정: `JungMK0720`. 초기에는 조직 저장소 쓰기 권한 검사에서 403이 반환됐으며, 2026-10-25 후속 확인에서 관리자·쓰기 권한이 정상 확인됐다.
 - 작업 브랜치 푸시와 [PR #36](https://github.com/team-onetruck/oneload-app/pull/36) 생성을 완료했다. 최신 CI·병합·배포 상태는 PR과 Actions에서 확인한다.
+- 2026-10-25 GitHub API 조회에서 배포 러너 `macserver-hangil-app`이 `offline`으로 확인됐다. 서버 담당자의 러너 복구가 필요하며, 앞선 main 배포도 대기 중이었다.
 - 운영 주소 `https://baki-macbookpro.tail3286a4.ts.net:10000`은 이 PC에서 DNS 해석에 실패했다. 로컬 성공을 운영 배포 성공으로 간주하지 않는다.
 
 새 작업이나 재배포 변경도 아래 순서로 진행한다.

@@ -73,7 +73,7 @@ VITE_API_PROXY_TARGET=https://baki-macbookpro.tail3286a4.ts.net:10000 pnpm dev  
 ### 테스트
 
 ```sh
-pnpm verify   # 헤더 검사 + oxlint + 타입체크 + vitest
+pnpm verify   # oxlint + 타입체크 + vitest
 pnpm e2e      # Playwright: 서버 연결 화면, 예전 데모 진입 차단, 카메라 안내
 pnpm build    # 프로덕션 빌드
 ```
