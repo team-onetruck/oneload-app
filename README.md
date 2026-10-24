@@ -78,7 +78,7 @@ VITE_API_MODE=mock pnpm dev                                               # 서�
 ### 테스트
 
 ```sh
-pnpm verify   # 헤더 검사 + oxlint + 타입체크 + vitest. 커밋 전에 반드시 통과시킨다
+pnpm verify   # oxlint + 타입체크 + vitest. 커밋 전에 반드시 통과시킨다
 pnpm e2e      # Playwright(pnpm test:e2e). 개발 서버를 mock(4179)·http(4180) 모드로 하나씩 띄운다. 처음 한 번 pnpm exec playwright install chromium
 ```
 
