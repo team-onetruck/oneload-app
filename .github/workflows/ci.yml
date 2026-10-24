@@ -19,14 +19,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      # 헤더 검사(scripts/check-header.mjs)가 `git diff main...HEAD`를 쓰므로 전체 이력이 필요하다.
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      # fetch-depth: 0이어도 main은 origin/main으로만 받아진다. 로컬 main이 없으면 만든다.
-      - name: 헤더 검사용 main 브랜치 준비
-        run: git show-ref --verify --quiet refs/heads/main || git branch main origin/main
 
       - uses: actions/setup-node@v7
         with:

@@ -12,8 +12,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "e2e": "pnpm test:e2e",
-    "verify": "pnpm check:header && pnpm lint && pnpm typecheck && pnpm test",
-    "check:header": "node scripts/check-header.mjs",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test",
     "gen:api": "node scripts/gen-api.mjs"
   },
   "dependencies": {

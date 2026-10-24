@@ -29,12 +29,11 @@ CD(지속적 배포)는 main에 합쳐진 결과를 사람 손 없이 서버에 
 
 | 단계 | 이유 |
 | --- | --- |
-| `actions/checkout` + `fetch-depth: 0` | 헤더 검사(`scripts/check-header.mjs`)가 `git diff main...HEAD`로 새 파일을 찾으므로 전체 이력이 필요하다 |
-| 로컬 `main` 브랜치 준비 | checkout은 main을 `origin/main`으로만 받아서, 헤더 검사가 쓰는 `main` 이름을 만들어 준다 |
+| `actions/checkout` | 검증할 커밋의 소스를 가져온다 |
 | Node 22 + corepack으로 pnpm 11.13.0 | 로컬과 같은 pnpm 버전을 써야 lockfile 해석이 같다 |
 | pnpm store 캐시 | lockfile이 같으면 내려받은 패키지를 다시 쓰므로 설치가 빨라진다 |
 | `pnpm install --frozen-lockfile` | lockfile과 `package.json`이 어긋나면 설치를 실패시킨다. "내 컴퓨터에서는 됐는데"를 막는다 |
-| `pnpm verify` | 헤더 검사 + oxlint + 타입체크 + 단위 테스트. 로컬에서 커밋 전에 돌리는 것과 같은 명령이다 |
+| `pnpm verify` | oxlint + 타입체크 + 단위 테스트. 로컬에서 커밋 전에 돌리는 것과 같은 명령이다 |
 
 ### e2e job
 
