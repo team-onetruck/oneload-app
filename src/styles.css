@@ -495,7 +495,7 @@ button {
   display: grid;
   gap: 10px;
 }
-.demo-note {
+.service-note {
   font-size: 12px;
   color: var(--muted);
   text-align: center;
@@ -872,127 +872,8 @@ button {
   width: auto;
   cursor: pointer;
 }
-.label.pad {
-  margin-top: 22px;
-}
-.demo-photos {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  padding: 0 20px;
-}
-.demo-photo {
-  display: grid;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  text-align: center;
-}
-.demo-photo .sign {
-  height: 86px;
-  border-radius: 12px;
-}
 .locate .btn.ghost {
   margin: 14px 0 calc(var(--safe-bottom) + 4px);
-}
-
-/* Demo photos are drawn signs, labelled as demo, never real station imagery. */
-.sign {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px;
-  background: #1f2a36;
-  color: #fff;
-  overflow: hidden;
-  position: relative;
-}
-.sign-badge {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-weight: 800;
-  font-size: 14px;
-  flex: none;
-}
-.sign-badge.arex {
-  background: var(--line);
-}
-.sign-badge.ktx {
-  width: auto;
-  padding: 0 6px;
-  border-radius: 4px;
-  background: #1b3a8a;
-  font-size: 11px;
-}
-.sign-text {
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.15;
-  text-align: left;
-}
-.sign-text small {
-  display: block;
-  font-size: 9px;
-  font-weight: 500;
-  opacity: 0.85;
-}
-.sign-corner {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  color: #fff;
-  font-weight: 800;
-  font-size: 12px;
-  display: grid;
-  place-items: center;
-}
-.sign-corner.l4 {
-  background: #00a5de;
-}
-.sign-blurry {
-  background: #5d646c;
-}
-.sign-blur {
-  position: absolute;
-  inset: 12px;
-  border-radius: 8px;
-  background: linear-gradient(120deg, #8c949c, #3d444b 60%, #a8b0b8);
-  filter: blur(8px);
-}
-.sign.large {
-  width: 100%;
-  height: 100%;
-  padding: 28px;
-  gap: 16px;
-}
-.sign.large .sign-badge {
-  width: 64px;
-  height: 64px;
-  font-size: 32px;
-}
-.sign.large .sign-text {
-  font-size: 30px;
-}
-.sign.large .sign-text small {
-  font-size: 16px;
-}
-.sign.large .sign-badge.ktx {
-  width: auto;
-  padding: 0 14px;
-  font-size: 26px;
-}
-.sign.large .sign-corner {
-  width: 46px;
-  height: 46px;
-  font-size: 26px;
-  right: 20px;
-  bottom: 20px;
 }
 
 /* ---------- Analyzing ---------- */
@@ -1667,18 +1548,6 @@ button {
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
   pointer-events: none;
 }
-.live-debug {
-  position: absolute;
-  top: 52px;
-  left: 12px;
-  z-index: 2;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: rgba(16, 19, 23, 0.72);
-  color: #9fe0a8;
-  font: 12px/1.3 ui-monospace, monospace;
-  pointer-events: none;
-}
 
 /* ---------- Arrived ---------- */
 
@@ -1783,41 +1652,6 @@ button {
   flex: 1 1 auto;
 }
 
-/* ---------- Demo panel ---------- */
-
-.demo-pill {
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10;
-  height: 26px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: #101317;
-  color: #9fd8f3;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-@media (max-width: 500px) {
-  /* On a real phone the tab would sit over content, so it only appears with ?demo in the URL. */
-  .demo-pill {
-    top: 38%;
-    left: auto;
-    right: 0;
-    transform: none;
-    height: auto;
-    padding: 10px 4px;
-    border-radius: 8px 0 0 8px;
-    writing-mode: vertical-rl;
-    font-size: 11px;
-    opacity: 0.8;
-  }
-  .demo-pill.opt-in {
-    display: none;
-  }
-}
 .sheet-backdrop {
   position: absolute;
   inset: 0;
@@ -1854,65 +1688,6 @@ button {
 .sheet-head h2 {
   font-size: 18px;
 }
-.state-line {
-  display: grid;
-  gap: 2px;
-  padding-left: 4px;
-}
-.state-line li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--muted);
-}
-.state-line span {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 3px solid var(--line-soft);
-}
-.state-line li.on {
-  color: var(--ink);
-  font-weight: 700;
-}
-.state-line li.on span {
-  border-color: var(--ink);
-  background: var(--ink);
-}
-.state-line code {
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-}
-.switch {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  font-weight: 600;
-  font-size: 15px;
-}
-.switch input {
-  width: 22px;
-  height: 22px;
-  accent-color: var(--line-ink);
-}
-.seg {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-}
-.seg button {
-  min-height: 40px;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 650;
-  box-shadow: inset 0 0 0 1.5px var(--rule);
-}
-.seg button[aria-pressed='true'] {
-  box-shadow: inset 0 0 0 2px var(--ink);
-  background: var(--ground-2);
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

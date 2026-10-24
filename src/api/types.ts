@@ -53,7 +53,7 @@ export interface MutationOptions extends CallOptions {
   idempotencyKey?: string
 }
 
-// 화면과 features가 보는 서버 경계. http 구현(httpAdapter.ts)과 mock 구현(mockAdapter.ts)이 같은 인터페이스를 따르고, index.ts가 VITE_API_MODE로 하나를 고른다.
+// 화면과 features가 보는 서버 경계. 앱은 httpAdapter.ts로 서버를 호출하고, 테스트는 같은 인터페이스의 mockAdapter.ts도 사용한다.
 export interface ApiAdapter {
   getHealth(options?: CallOptions): Promise<HealthOut>
   getMaps(options?: CallOptions): Promise<MapsOut>
