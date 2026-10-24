@@ -84,11 +84,11 @@ docker compose -p oneload-local-review -f compose.yaml -f C:/Users/Public/Docume
 - 작업 브랜치: `refactor/server-only-20261024`.
 - 별도 worktree: `../oneload-app-server-only`. 원래 공유 폴더의 미커밋 변경은 보존했다.
 - 로컬 검증: 작업 worktree에서 프로덕션 빌드, 실제 API 연동 흐름과 Playwright 20개 통과. 단위 테스트는 [서버 연결 단일화 문서](server-only.md)의 Node 환경 설정을 적용하면 445개 통과.
-- 연결된 GitHub 계정: `JungMK0720`. 조직 저장소 `team-onetruck/oneload-app` 쓰기 권한 검사에서 403 반환.
-- PR·새 원격 CI·merge·배포는 진행하지 못했다. 통합 브랜치에 직접 커밋하거나 푸시하지 않는다.
+- 연결된 GitHub 계정: `JungMK0720`. 초기에는 조직 저장소 쓰기 권한 검사에서 403이 반환됐으며, 2026-10-25 후속 확인에서 관리자·쓰기 권한이 정상 확인됐다.
+- 작업 브랜치 푸시와 [PR #36](https://github.com/team-onetruck/oneload-app/pull/36) 생성을 완료했다. 최신 CI·병합·배포 상태는 PR과 Actions에서 확인한다.
 - 운영 주소 `https://baki-macbookpro.tail3286a4.ts.net:10000`은 이 PC에서 DNS 해석에 실패했다. 로컬 성공을 운영 배포 성공으로 간주하지 않는다.
 
-쓰기 권한이 있는 계정에서 아래 순서로 진행한다.
+새 작업이나 재배포 변경도 아래 순서로 진행한다.
 
 1. 작업 worktree에서 `git push -u origin refactor/server-only-20261024`.
 2. [작업 브랜치 → main PR](https://github.com/team-onetruck/oneload-app/compare/main...refactor/server-only-20261024?expand=1)을 생성한다.
@@ -100,4 +100,4 @@ docker compose -p oneload-local-review -f compose.yaml -f C:/Users/Public/Docume
 
 ## 팀에 전달할 문장
 
-> 프론트의 데모 진입과 모드 배지를 제거하고 서버 연결로 통일했습니다. 실제 로컬 프론트–FastAPI–PostgreSQL 연결에서 채팅, 위치 확정, 경로, 도착까지 확인했습니다. 로컬 AI 키가 없어 사진 인식은 수동 선택으로 전환되며, LLM·RAG 품질은 별도 확인이 필요합니다. 작업 브랜치에서 검증과 커밋을 진행했고 현재 GitHub 계정의 조직 쓰기 권한이 없어 원격 반영은 보류됐습니다. 권한 있는 계정에서 브랜치 푸시와 PR을 만든 뒤 필수 CI를 통과하고 merge하면 기존 자동 배포가 실행됩니다.
+> 프론트의 데모 진입과 모드 배지를 제거하고 서버 연결로 통일했습니다. 실제 로컬 프론트–FastAPI–PostgreSQL 연결에서 채팅, 위치 확정, 경로, 도착까지 확인했습니다. 로컬 AI 키가 없어 사진 인식은 수동 선택으로 전환되며, LLM·RAG 품질은 별도 확인이 필요합니다. 작업 브랜치에서 검증과 커밋을 마쳤고 권한 회복 후 PR #36을 생성했습니다. 필수 CI를 통과한 뒤 merge하면 기존 자동 배포가 실행됩니다. 최신 병합·배포 상태는 PR과 Actions에서 확인할 수 있습니다.
