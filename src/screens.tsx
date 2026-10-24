@@ -4,20 +4,19 @@ import {
   AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpDown, Banknote, BookOpen, Camera, Check, ChevronRight, Footprints,
   House as Home, ImagePlus, List, Menu as MenuIcon, MessageCircle, Navigation, RefreshCw, Rotate3d, RotateCcw, Route, ScanLine, Star, Ticket, TimerOff, X,
 } from 'lucide-react'
-import { apiMode, demoMode } from './api'
 import { render } from './assistant'
 import type { Rendered } from './assistant'
 import { TRAIN_NAME } from './data'
-import type { Lang, PhotoScenario, Text } from './data'
+import type { Lang, Text } from './data'
 import type { ChatAction, ChatSource, ChatView, ErrorReason } from './features/chat/toViewModel'
 import type { PlaceView } from './features/localization/views'
 import { remainingDistanceM } from './features/route/toSteps'
 import { useRecovery } from './features/recovery/context'
 import type { NoticeReason, Recovery, RecoveryAction, RelocateReason, SessionEndCause } from './features/recovery/recovery'
 import { LANGUAGE_OPTIONS } from './features/session/languages'
-import { UI, modeCopy } from './i18n'
+import { UI } from './i18n'
 import { useApp } from './store'
-import type { Attachment, Msg, SessionState } from './store'
+import type { Attachment, Msg } from './store'
 
 // three.js and the panorama viewer are most of the bundle; keep them out of
 // the first load and fetch them once a route is on screen.
@@ -27,9 +26,6 @@ const loadLiveView = () => import('./liveview')
 const LiveView = lazy(() => loadLiveView().then((m) => ({ default: m.LiveView })))
 
 const WALK_M_PER_MIN = 70
-
-// 상단 필·설정 패널·시작 화면 문구는 모드를 따른다. mock은 "Demo", http(실서버 연결)는 "Live"
-const MODE = modeCopy(demoMode)
 
 // 왼쪽 위 햄버거 버튼. 눌러서 메뉴(SideMenu)를 연다
 function MenuButton({ onDark = false }: { onDark?: boolean }) {
@@ -197,7 +193,7 @@ export function Welcome() {
             </>
           )}
         </button>
-        <p className="demo-note">{MODE.note[lang]}</p>
+        <p className="service-note">{UI.serviceNote[lang]}</p>
       </div>
     </main>
   )
@@ -464,39 +460,6 @@ export function Chat() {
 
 /* ---------- Locate ---------- */
 
-function DemoSign({ scenario, large = false }: { scenario: PhotoScenario; large?: boolean }) {
-  return (
-    <div className={`sign sign-${scenario} ${large ? 'large' : ''}`} aria-hidden>
-      {scenario === 'arexSign' && (
-        <>
-          <span className="sign-badge arex">A</span>
-          <span className="sign-text">
-            공항철도 →
-            <small>Airport Railroad</small>
-          </span>
-          <span className="sign-corner l4">4</span>
-        </>
-      )}
-      {scenario === 'ktxSign' && (
-        <>
-          <span className="sign-badge ktx">KTX</span>
-          <span className="sign-text">
-            맞이방
-            <small>Departure Hall</small>
-          </span>
-        </>
-      )}
-      {scenario === 'blurry' && <span className="sign-blur" />}
-    </div>
-  )
-}
-
-const DEMO_PHOTOS: { id: PhotoScenario; label: Text }[] = [
-  { id: 'arexSign', label: { en: 'Transfer sign', ko: '환승 안내판' } },
-  { id: 'ktxSign', label: { en: 'KTX hall sign', ko: 'KTX 맞이방' } },
-  { id: 'blurry', label: { en: 'Blurry photo', ko: '흐린 사진' } },
-]
-
 export function Locate() {
   const app = useApp()
   const { lang } = app
@@ -515,23 +478,10 @@ export function Locate() {
         <Camera size={20} /> {UI.takePhoto[lang]}
         <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => {
           const f = e.target.files?.[0]
-          if (f) app.analyzePhoto({ src: URL.createObjectURL(f), scenario: app.uploadScenario, file: f })
+          if (f) app.analyzePhoto({ src: URL.createObjectURL(f), file: f })
           e.target.value = ''
         }} />
       </label>
-      {app.demoPhotos && (
-        <>
-          <p className="label pad">{UI.demoPhotos[lang]}</p>
-          <div className="demo-photos">
-            {DEMO_PHOTOS.map((p) => (
-              <button key={p.id} className="demo-photo" onClick={() => app.analyzeDemoPhoto(p.id)}>
-                <DemoSign scenario={p.id} />
-                <span>{p.label[lang]}</span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
       <button className="btn ghost block" onClick={() => app.setScreen('manual')}>
         <List size={18} /> {UI.pickOnList[lang]}
       </button>
@@ -542,7 +492,7 @@ export function Locate() {
 function PhotoView({ large = false }: { large?: boolean }) {
   const { photo } = useApp()
   if (!photo) return null
-  return photo.src ? <img className={`photo ${large ? 'large' : ''}`} src={photo.src} alt="" /> : <DemoSign scenario={photo.scenario} large={large} />
+  return <img className={`photo ${large ? 'large' : ''}`} src={photo.src} alt="" />
 }
 
 export function Analyzing() {
@@ -644,7 +594,7 @@ export function Candidates() {
 
 /* ---------- Lists ---------- */
 
-// http 모드는 지도 그래프의 노드 전체, mock 모드는 데모 출발지 목록이다 (store.manualList)
+// 직접 선택 목록은 서버 지도 그래프의 노드 전체다 (store.manualList)
 export function Manual() {
   const app = useApp()
   const { lang, manualList } = app
@@ -809,7 +759,7 @@ export function RouteScreen() {
           {(['line', 'street', 'live'] as const).map((v) => (
             <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}>
               {v === 'line' ? <Route size={16} /> : v === 'street' ? <Rotate3d size={16} /> : <Camera size={16} />}
-              {v === 'line' ? UI.viewLine[lang] : v === 'street' ? UI.viewStreet[lang] : UI.viewLive[lang]}
+              {v === 'line' ? UI.viewLine[lang] : v === 'street' ? UI.viewStreet[lang] : UI.viewCamera[lang]}
             </button>
           ))}
         </div>
@@ -829,7 +779,6 @@ export function RouteScreen() {
               <LiveView
                 leg={leg}
                 lang={lang}
-                showDebug={demoMode}
                 onLeave={() => setView('line')}
                 chip={
                   <>
@@ -1080,64 +1029,4 @@ export function ErrorNotice() {
     else app.reset()
   }
   return <ErrorNoticeView notice={notice} lang={app.lang} onAction={onAction} />
-}
-
-/* ---------- Demo panel ---------- */
-
-const STATES: SessionState[] = ['idle', 'needs_clarification', 'needs_location', 'needs_confirmation', 'ready_to_navigate', 'navigating', 'arrived']
-
-export function DemoPanel() {
-  const app = useApp()
-  const { lang, session } = app
-  return (
-    <>
-      <button className={`demo-pill ${new URLSearchParams(location.search).has('demo') ? '' : 'opt-in'}`} onClick={() => app.setDemoOpen(true)}>
-        {MODE.pill[lang]}
-      </button>
-      {app.demoOpen && (
-        <div className="sheet-backdrop" onClick={() => app.setDemoOpen(false)}>
-          <section className="sheet" role="dialog" aria-label={MODE.panel[lang]} onClick={(e) => e.stopPropagation()}>
-            <div className="sheet-head">
-              <h2>{MODE.panel[lang]}</h2>
-              <button className="icon-btn" onClick={() => app.setDemoOpen(false)} aria-label={UI.close[lang]}>
-                <X size={22} />
-              </button>
-            </div>
-            <p className="label">
-              {UI.sessionState[lang]} · rev {session?.revision ?? '–'} · {apiMode}
-              {app.sessionInfo && ` · ${app.sessionInfo.id}`}
-            </p>
-            <ol className="state-line">
-              {STATES.map((s) => (
-                <li key={s} className={s === session?.state ? 'on' : ''}>
-                  <span />
-                  <code>{s}</code>
-                </li>
-              ))}
-            </ol>
-            <label className="switch">
-              <input type="checkbox" checked={app.failNext} onChange={(e) => app.setFailNext(e.target.checked)} />
-              <span>{UI.failNext[lang]}</span>
-            </label>
-            {/* 올린 사진의 결과를 고르는 스위치는 mock 모드에서만 의미가 있다. http 모드는 서버가 정한다 */}
-            {app.demoPhotos && (
-              <>
-                <p className="label">{UI.uploadResult[lang]}</p>
-                <div className="seg">
-                  {DEMO_PHOTOS.map((p) => (
-                    <button key={p.id} aria-pressed={app.uploadScenario === p.id} onClick={() => app.setUploadScenario(p.id)}>
-                      {p.label[lang]}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-            <button className="btn secondary block" onClick={app.reset}>
-              <RefreshCw size={18} /> {MODE.reset[lang]}
-            </button>
-          </section>
-        </div>
-      )}
-    </>
-  )
 }

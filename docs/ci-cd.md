@@ -14,7 +14,7 @@ CD(지속적 배포)는 main에 합쳐진 결과를 사람 손 없이 서버에 
 
 | 워크플로 | 파일 | 언제 | 하는 일 | 상태 |
 | --- | --- | --- | --- | --- |
-| CI | `.github/workflows/ci.yml` | 모든 브랜치 push, 모든 PR | `pnpm verify`, e2e(Playwright 11개) | 동작 중 |
+| CI | `.github/workflows/ci.yml` | 모든 브랜치 push, 모든 PR | `pnpm verify`, e2e(Playwright) | 동작 중 |
 | Deploy | `.github/workflows/ci.yml`의 `deploy` job | main push에서 verify·e2e 통과 후 | oneload-infra의 공용 배포를 이 레포 전용 runner(macserver)에서 돌려 웹 이미지를 새로 올린다 | 동작 중 |
 
 ## 2. CI: `ci.yml`
@@ -37,12 +37,11 @@ CD(지속적 배포)는 main에 합쳐진 결과를 사람 손 없이 서버에 
 
 ### e2e job
 
-- `pnpm test:e2e`로 11개를 돌린다. `playwright.config.ts`가 개발 서버를 모드마다 하나씩 띄운다.
-
-  | 프로젝트 | 개발 서버 | 테스트 |
-  | --- | --- | --- |
-  | `mock` | `VITE_API_MODE=mock`, 4179 | `e2e/smoke.spec.ts`(시작 화면, Demo 라벨) 2개, `e2e/mock/` 기준선 5개(서버 없는 데모 흐름, `/api`로 나가는 요청이 없는지) |
-  | `http` | `VITE_API_MODE=http`, 4180 | `e2e/scenarios/` 4개(직통열차, 일반열차+카드 없음, 사진 503 → 직접 선택, Live 라벨). `/api/v1`은 `page.route`로 가로채 MSW 핸들러가 답한다 |
+- `pnpm test:e2e`로 서버 연결 앱을 검증한다. `playwright.config.ts`는 개발 서버 하나(4180)를 띄운다.
+  - `http`: 모바일 크롬에서 시작 화면, 직통열차·일반열차·사진 503 시나리오, 카메라 안내와 예전 데모 진입 차단을 검증한다.
+  - `desktop`: 한국어·영어로 `/`, `/?demo`, `/?demo&mode=mock`에 접속해도 데모 도구와 모드 배지가 없고 서버 세션을 생성하는지 검증한다.
+  - 서버에는 예전 `VITE_API_MODE=mock`을 의도적으로 설정한다. 앱이 이 값을 무시하고 HTTP 요청을 보내야 통과한다.
+  - 데모 전용 E2E는 제거했다. 카메라 E2E는 HTTP 어댑터와 MSW 응답을 쓰도록 옮겼다.
 
   `test:e2e` 스크립트가 없으면 설치와 실행 단계를 건너뛰고 통과로 표시하는 조건은 그대로 남아 있다.
 - 브라우저 설치는 캐시를 쓴다. 설치된 `@playwright/test` 버전으로 `~/.cache/ms-playwright`를 캐시하고(키: OS, 아키텍처, Playwright 버전), 버전이 같으면 받는 chromium도 같다.
@@ -54,7 +53,7 @@ CD(지속적 배포)는 main에 합쳐진 결과를 사람 손 없이 서버에 
 
 ### 검증 범위: 무엇을 증명하고 무엇을 증명하지 않는가
 
-CI의 vitest(MSW 계약 테스트 포함)와 Playwright 스모크는 모두 서버 없이 돈다. vitest는 가짜 fetch와 MSW 핸들러(`src/test/handlers.ts`, 타입은 OpenAPI에서 생성한 `src/api/schema.d.ts`)로 백엔드를 흉내 내어, 클라이언트가 계약대로 요청을 만들고 409·503·타임아웃 같은 응답을 처리하는지 확인한다. Playwright 스모크(`e2e/smoke.spec.ts`, mock 모드 1건)는 앱이 실행되어 시작 화면이 뜨는지만 보고, mock 기준선(`e2e/mock/`, 5건)은 서버 없는 데모 흐름이 그대로이고 서버로 나가는 요청이 없는지 본다. Playwright 시나리오(`e2e/scenarios/`, http 모드 3건)는 실제 화면과 http 어댑터로 채팅 → 사진(또는 503 뒤 직접 선택) → 위치 확정 → 경로 → 길안내 이벤트를 따라가지만, 응답은 같은 MSW 핸들러가 만든다. 그래서 CI가 초록이어도 실서버에서 채팅 → 사진 → 경로 전체 흐름이 동작한다는 증거는 아니다. MSW 핸들러는 우리가 이해한 계약을 흉내 낸 것이라 실제 서버의 답변 문구(`RuleAgent`), 응답 시점, 지도 데이터와 다를 수 있다. 실서버 확인은 각 PR 본문의 브라우저 확인 절(예: #12의 "브라우저(http, 로컬 백엔드)")을 본다.
+CI의 vitest와 Playwright는 실제 백엔드 없이 돈다. vitest는 가짜 fetch와 MSW로 요청 계약과 오류 복구를 검증한다. Playwright는 실제 화면과 HTTP 어댑터를 사용하지만 `/api/v1` 응답은 `page.route`가 MSW 핸들러로 재현한다. 시작 화면, 예전 데모 진입 차단, 채팅 → 사진(또는 503 뒤 직접 선택) → 위치 확정 → 경로 → 안내 이벤트, 카메라 안내를 검증한다. 따라서 테스트 통과가 실제 백엔드의 가동 상태나 AI 응답 품질을 보증하지는 않는다.
 
 ## 3. CD: 이 레포의 runner에서 공용 배포를 돈다
 

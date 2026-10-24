@@ -1,0 +1,99 @@
+{
+  "checkedAt": "2026-10-24T14:59:37.460Z",
+  "baseURL": "http://127.0.0.1:5173",
+  "health": {
+    "status": "ok",
+    "api_version": "v1",
+    "dependencies": {
+      "database": "ok"
+    }
+  },
+  "apiResponsesReplaced": false,
+  "aiMode": "RuleAgent / NoVision (OPENAI_API_KEY 없음)",
+  "calls": [
+    {
+      "method": "POST",
+      "path": "/api/v1/sessions",
+      "status": 201,
+      "session": {
+        "state": "idle",
+        "revision": 1
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/sessions/{id}/messages",
+      "status": 200,
+      "session": {
+        "state": "needs_clarification",
+        "revision": 2
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/sessions/{id}/messages",
+      "status": 200,
+      "session": {
+        "state": "needs_location",
+        "revision": 3
+      },
+      "destination": {
+        "poi_id": "poi-express-tickets"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/maps/seoul-station/graph",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/sessions/{id}/localizations",
+      "status": 503,
+      "errorCode": "AI_SERVICE_UNAVAILABLE"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/sessions/{id}/location-confirmations",
+      "status": 200,
+      "session": {
+        "state": "ready_to_navigate",
+        "revision": 4
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/sessions/{id}/routes",
+      "status": 200,
+      "session": {
+        "state": "ready_to_navigate",
+        "revision": 5
+      },
+      "routeStepCount": 2
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/sessions/{id}/navigation-events",
+      "status": 200,
+      "session": {
+        "state": "navigating",
+        "revision": 6
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/maps/seoul-station/pois",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/sessions/{id}/navigation-events",
+      "status": 200,
+      "session": {
+        "state": "arrived",
+        "revision": 7
+      }
+    }
+  ],
+  "pageErrors": []
+}

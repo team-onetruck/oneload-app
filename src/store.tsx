@@ -1,20 +1,18 @@
 // 화면 상태와 사용자 동작. 서버 호출은 src/api의 어댑터 하나로만 하고, 세션 state·revision은 늘 응답 값을 쓴다.
-// VITE_API_MODE=mock이면 같은 호출을 mock 어댑터(src/api/mockAdapter.ts)가 서버 없이 받는다.
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
-  clearSession, confirmLocation as confirmLocationApi, createRoute, createSession, demoMode, getMapGraph, getNavigationState, isApiError,
-  patchSession, postLocalization, postNavigationEvents, searchPois, sendMessage, setDemoPhotoResult,
+  clearSession, confirmLocation as confirmLocationApi, createRoute, createSession, getMapGraph, getNavigationState, isApiError,
+  patchSession, postLocalization, postNavigationEvents, searchPois, sendMessage,
 } from './api'
 import type { GraphOut, NavigationStateOut, PoisOut, SessionStatus } from './api'
 import type { Reply } from './assistant'
-import type { Lang, PhotoScenario, Text, TrainType } from './data'
+import type { Lang, Text, TrainType } from './data'
 import { messageBody, replyEffects, resyncPlan } from './features/chat/replyEffects'
 import { sendChat } from './features/chat/sendChat'
 import { toErrorView } from './features/chat/toViewModel'
 import type { ChatChip, ChatView, ErrorView } from './features/chat/toViewModel'
 import { compressImage } from './features/localization/compressImage'
-import { demoPhotoFile } from './features/localization/demoPhoto'
 import type { LocationChoice } from './features/localization/confirm'
 import { sendConfirmation, sendPhoto } from './features/localization/flow'
 import type { LocateResult } from './features/localization/locate'
@@ -39,15 +37,6 @@ import { detectDeviceLang } from './features/session/languages'
 
 export type Screen = 'welcome' | 'chat' | 'locate' | 'analyzing' | 'candidates' | 'manual' | 'destinations' | 'route' | 'arrived'
 
-export type SessionState =
-  | 'idle'
-  | 'needs_clarification'
-  | 'needs_location'
-  | 'needs_confirmation'
-  | 'ready_to_navigate'
-  | 'navigating'
-  | 'arrived'
-
 export interface Msg {
   id: number
   role: 'user' | 'assistant'
@@ -55,7 +44,7 @@ export interface Msg {
   image?: string
   // 화면이 그리는 첫 인사(greet). 언어를 바꾸면 그 언어로 다시 그린다
   reply?: Reply
-  // 서버(mock 모드에서는 mock 어댑터)의 응답·오류 말풍선
+  // 서버의 응답·오류 말풍선
   view?: ChatView
   pending?: boolean
 }
@@ -75,10 +64,9 @@ interface Utterance {
 }
 
 export interface Photo {
-  src: string | null
-  scenario: PhotoScenario
-  // 찍은 사진, 또는 데모 사진 버튼이 만든 JPEG. 압축해서 보낸다
-  file?: Blob
+  src: string
+  // 사용자가 찍거나 올린 사진. 압축해서 보낸다
+  file: Blob
 }
 
 // 직접 선택 화면에 온 이유. 사진 인식을 쓸 수 없어(503) 넘어왔으면 안내 한 줄을 보여 준다
@@ -101,7 +89,7 @@ function useAppState() {
   const [lang, setLang] = useState<Lang>(() => detectDeviceLang())
   const [screen, setScreen] = useState<Screen>('welcome')
   const [menuOpen, setMenuOpen] = useState(false)
-  // state·revision은 서버(mock 모드에서는 mock 어댑터) 응답의 session 필드로만 바뀐다. 시작 전에는 null
+  // state·revision은 서버 응답의 session 필드로만 바뀐다. 시작 전에는 null
   const [session, setSession] = useState<SessionStatus | null>(null)
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null)
   const [starting, setStarting] = useState<{ pending: boolean; error: ErrorView | null }>({ pending: false, error: null })
@@ -126,9 +114,6 @@ function useAppState() {
   const [located, setLocated] = useState<LocateResult | null>(null)
   // 위치 확정 요청을 보내는 중이면 후보·목록 버튼을 잠근다
   const [confirming, setConfirming] = useState(false)
-  const [failNext, setFailNext] = useState(false)
-  const [uploadScenario, setUploadScenario] = useState<PhotoScenario>('arexSign')
-  const [demoOpen, setDemoOpen] = useState(false)
   const nextId = useRef(1)
   // 오류 복구 상태. RecoveryProvider가 AppProvider 바깥에 있어서 store에서도 fail()을 쓸 수 있다
   const recovery = useRecovery()
@@ -167,9 +152,9 @@ function useAppState() {
   const sessionId = sessionInfo?.id ?? null
   const hasRoute = activeRoute !== null
   const revision = session?.revision ?? 0
-  const live = useRef({ train, dest, here, failNext, lang, sessionId, sessionInfo, hasRoute, revision, located, confirming, activeRoute, stepIdx })
+  const live = useRef({ train, dest, here, lang, sessionId, sessionInfo, hasRoute, revision, located, confirming, activeRoute, stepIdx })
   useLayoutEffect(() => {
-    live.current = { train, dest, here, failNext, lang, sessionId, sessionInfo, hasRoute, revision, located, confirming, activeRoute, stepIdx }
+    live.current = { train, dest, here, lang, sessionId, sessionInfo, hasRoute, revision, located, confirming, activeRoute, stepIdx }
   })
 
   // 응답의 session을 그대로 반영한다. 늦게 도착한 옛 응답이 더 새 값을 덮지 않도록 revision이 작으면 버린다.
@@ -253,8 +238,6 @@ function useAppState() {
     // 초기화 뒤에 도착한 옛 세션의 응답과 오류는 버린다
     const current = () => live.current.sessionId === sid
     const fail = (error: unknown, handlers?: FailHandlers) => current() && recovery.fail(error, handlers)
-    const simulateTimeout = live.current.failNext
-    if (simulateTimeout) setFailNext(false)
 
     let image: Blob | undefined
     if (u.image) {
@@ -271,7 +254,6 @@ function useAppState() {
       api: chatApi,
       sessionId: sid,
       body: messageBody(u.message, u.selectedPoiId ?? null, image),
-      simulateTimeout,
       hooks: {
         fail,
         onReply: (res) => {
@@ -305,7 +287,7 @@ function useAppState() {
     })
   }
 
-  // 사용자 말을 말풍선으로 남기고 서버(mock 모드에서는 mock 어댑터)에 보낸다
+  // 사용자 말을 말풍선으로 남기고 서버에 보낸다
   const say = (u: Utterance) => {
     push({ role: 'user', text: u.display || undefined, image: u.image?.url })
     void askServer(u)
@@ -501,18 +483,7 @@ function useAppState() {
   const analyzePhoto = (p: Photo) => {
     setPhoto(p)
     setScreen('analyzing')
-    if (!p.file) return setScreen('locate')
-    // mock 모드에서는 데모 사진 종류(올린 사진은 데모 패널의 업로드 결과)가 위치 인식 결과를 정한다. http 모드에서는 아무 일도 없다
-    setDemoPhotoResult(p.scenario)
     void locateOnServer(p.file)
-  }
-
-  // 데모 사진 버튼(mock 모드). 올린 사진과 같은 압축·업로드 경로를 타도록 작은 JPEG를 만들어 보낸다
-  const analyzeDemoPhoto = (scenario: PhotoScenario) => {
-    demoPhotoFile(scenario).then(
-      (file) => analyzePhoto({ src: null, scenario, file }),
-      (error) => recovery.fail(error, { manual: () => setScreen('manual') }),
-    )
   }
 
   // 사용자가 고른 위치를 확정한다. 409 REVISION_CONFLICT면 다시 맞춰 한 번 더 보내고, 응답의 session·location을 쓴다
@@ -620,10 +591,8 @@ function useAppState() {
     setPois(null)
     setLocated(null)
     setConfirming(false)
-    setFailNext(false)
-    setDemoOpen(false)
     setMenuOpen(false)
-    // 세션 종료 화면의 '다시 시작', 오류 알림의 '처음으로', 데모 초기화가 모두 여기로 온다
+    // 세션 종료 화면의 '다시 시작', 오류 알림의 '처음으로'가 모두 여기로 온다
     recovery.clear()
     setScreen('welcome')
   }
@@ -649,15 +618,12 @@ function useAppState() {
   // 마지막 사진이 503이었으면 직접 선택 화면에 안내 한 줄을 보여 준다. 다시 찍거나 확정하면 지워진다
   const manualReason: ManualReason = located?.kind === 'manual' ? located.reason : null
   const manualList: PlaceView[] | null = graph ? manualPlaces(graph) : null
-  // 데모 사진과 업로드 결과 스위치는 서버 없는 데모(mock 모드)에서만 보인다
-  const demoPhotos = demoMode
 
   return {
     lang, changeLang, langPending, menuOpen, setMenuOpen, screen, setScreen, session, sessionInfo, applySession, starting, startSession, routeActive,
     train, dest, here, guide, routing, routeError, arrivedPlace, atTickets, stepIdx, messages, photo,
-    graph, ensureGraph, destinationList, candidateList, retakeHint, manualList, manualReason, confirming, demoPhotos,
-    failNext, setFailNext, uploadScenario, setUploadScenario, demoOpen, setDemoOpen,
-    sendText, sendChip, sendSuggested, pickDestination, startRoute, analyzePhoto, analyzeDemoPhoto, confirmLocation, nextStep, reportLost, reset,
+    graph, ensureGraph, destinationList, candidateList, retakeHint, manualList, manualReason, confirming,
+    sendText, sendChip, sendSuggested, pickDestination, startRoute, analyzePhoto, confirmLocation, nextStep, reportLost, reset,
   }
 }
 

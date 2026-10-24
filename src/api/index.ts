@@ -3,30 +3,14 @@
  * Author: Jung Minkyu
  * Purpose: 앱이 쓰는 서버 호출 진입점. 엔드포인트별 함수를 현재 ApiAdapter로 넘긴다
  */
-import type { PhotoScenario } from '../data'
 import { createApiClient } from './client'
 import { createHttpAdapter } from './httpAdapter'
-import { createMockAdapter } from './mockAdapter'
-import { API_MODE } from './mode'
 import type { ApiAdapter } from './types'
 
-// 모드 분기는 여기 한 곳이다. mock은 서버 없이 기존 데모 규칙(assistant.ts, data.ts, route.ts)으로 같은 모양의 응답을 준다
-const mock = API_MODE === 'mock' ? createMockAdapter() : null
-let adapter: ApiAdapter = mock ?? createHttpAdapter(createApiClient())
+// 앱은 항상 실제 서버를 호출한다. mock 어댑터는 단위 테스트에서만 직접 사용한다.
+const adapter: ApiAdapter = createHttpAdapter(createApiClient())
 
-// 테스트가 다른 어댑터를 끼울 때 쓴다
-export function setApiAdapter(next: ApiAdapter) {
-  adapter = next
-}
-
-// 데모 패널에 보일 모드 이름
-export const apiMode = API_MODE
-// 데모 사진 버튼과 업로드 결과 스위치는 서버 없는 데모(mock)에서만 쓴다
-export const demoMode = mock !== null
-// 다음 사진 위치 인식 결과를 데모 사진 종류로 정한다. http 모드에서는 아무 일도 하지 않는다
-export const setDemoPhotoResult = (scenario: PhotoScenario) => mock?.setPhotoScenario(scenario)
-
-// 호출할 때마다 현재 어댑터를 읽어서, 어댑터를 바꾼 뒤에도 같은 함수를 그대로 쓸 수 있다.
+// 모든 호출은 같은 HTTP 어댑터를 거친다.
 export const getHealth: ApiAdapter['getHealth'] = (options) => adapter.getHealth(options)
 export const getMaps: ApiAdapter['getMaps'] = (options) => adapter.getMaps(options)
 export const getMapGraph: ApiAdapter['getMapGraph'] = (mapId, options) => adapter.getMapGraph(mapId, options)

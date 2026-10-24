@@ -1,7 +1,7 @@
 /**
  * Date: 2026-10-23
  * Author: Jung Minkyu
- * Purpose: 경로 화면의 Live 탭. 후면 카메라 영상 위에 다음 지점이 있는 방향을 화살표로 얹는다. 위치는 확정된 지점뿐이고 방향만 실시간이다
+ * Purpose: 경로 화면의 카메라 탭. 후면 카메라 영상 위에 다음 지점이 있는 방향을 화살표로 얹는다. 위치는 확정된 지점뿐이고 방향만 실시간이다
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
@@ -23,14 +23,12 @@ interface Props {
   lang: Lang
   // 영상 위 왼쪽 위에 놓는 '지금 있는 지점' 칩 내용
   chip: ReactNode
-  // 방향 값을 그대로 보여 주는 확인용 표시(데모 모드에서만 켠다)
-  showDebug: boolean
   // 카메라를 쓸 수 없을 때 돌아갈 곳(노선 보기)
   onLeave: () => void
 }
 
 // 화살표가 바르게 보이려면 폰을 세워 앞을 비춰야 한다. 방향이 안 맞거나 못 읽으면 화살표를 숨기고 이유를 말한다
-export function LiveView({ leg, lang, chip, showDebug, onLeave }: Props) {
+export function LiveView({ leg, lang, chip, onLeave }: Props) {
   const { status: cameraStatus, start: startCamera, attach: attachVideo } = useCamera()
   const { status: compassStatus, reading, start: startCompass } = useCompass()
   const target = leg.headingDeg
@@ -109,11 +107,6 @@ export function LiveView({ leg, lang, chip, showDebug, onLeave }: Props) {
         </p>
       )}
       <p className="live-note">{UI.liveDirNote[lang]}</p>
-      {showDebug && (
-        <p className="live-debug">
-          {reading.deg === null ? '--' : `${Math.round(reading.deg)}°`} → {target ?? '--'}° · {reading.quality} · n={reading.samples} · σ={Math.round(reading.spreadDeg)}°
-        </p>
-      )}
     </div>
   )
 }

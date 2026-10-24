@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0.0",
+  "data_kind": "template",
+  "survey_id": "REPLACE_WITH_SURVEY_ID",
+  "map_id": "seoul-station",
+  "started_at": null,
+  "ended_at": null,
+  "collectors": [],
+  "scope_description": "REPLACE_WITH_ROUTE_AND_FLOORS",
+  "site_access_notes": "",
+  "coordinate_frame": {
+    "frame_id": "REPLACE_WITH_FRAME_ID",
+    "unit": "m",
+    "x_axis": "unresolved",
+    "y_axis": "up",
+    "z_axis": "unresolved",
+    "handedness": "left",
+    "origin_description": "REPLACE_WITH_FIXED_PHYSICAL_ORIGIN",
+    "north_reference": "unresolved",
+    "north_source_ids": [],
+    "north_uncertainty_deg": null
+  },
+  "devices": [],
+  "sources": [],
+  "floors": [],
+  "nodes": [],
+  "edges": [],
+  "landmarks": [],
+  "assets": [],
+  "compass_trials": [],
+  "route_trials": []
+}

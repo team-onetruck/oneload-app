@@ -1,0 +1,1460 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Hangil web field survey source manifest",
+  "description": "Survey source records, not the backend MapData payload. Unknown values stay null. data_kind=example/template must never be published. Schema checks structure; release gates and cross-record references require separate checks.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "data_kind": {
+      "enum": [
+        "template",
+        "example",
+        "field"
+      ]
+    },
+    "survey_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "map_id": {
+      "const": "seoul-station"
+    },
+    "started_at": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ended_at": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "collectors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "scope_description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "site_access_notes": {
+      "type": "string"
+    },
+    "coordinate_frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "frame_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unit": {
+          "const": "m"
+        },
+        "x_axis": {
+          "enum": [
+            "east",
+            "plan_right",
+            "unresolved"
+          ]
+        },
+        "y_axis": {
+          "const": "up"
+        },
+        "z_axis": {
+          "enum": [
+            "north",
+            "plan_up",
+            "unresolved"
+          ]
+        },
+        "handedness": {
+          "const": "left"
+        },
+        "origin_description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "north_reference": {
+          "enum": [
+            "true_north",
+            "magnetic_north",
+            "map_axis",
+            "unresolved"
+          ]
+        },
+        "north_source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "north_uncertainty_deg": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "frame_id",
+        "unit",
+        "x_axis",
+        "y_axis",
+        "z_axis",
+        "handedness",
+        "origin_description",
+        "north_reference",
+        "north_source_ids",
+        "north_uncertainty_deg"
+      ]
+    },
+    "devices": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Device"
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Source"
+      }
+    },
+    "floors": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Floor"
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Node"
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Edge"
+      }
+    },
+    "landmarks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Landmark"
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Asset"
+      }
+    },
+    "compass_trials": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CompassTrial"
+      }
+    },
+    "route_trials": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RouteTrial"
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "data_kind",
+    "survey_id",
+    "map_id",
+    "started_at",
+    "ended_at",
+    "collectors",
+    "scope_description",
+    "site_access_notes",
+    "coordinate_frame",
+    "devices",
+    "sources",
+    "floors",
+    "nodes",
+    "edges",
+    "landmarks",
+    "assets",
+    "compass_trials",
+    "route_trials"
+  ],
+  "$defs": {
+    "Proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "draft",
+            "field_checked",
+            "reviewed",
+            "rejected"
+          ]
+        },
+        "source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "evidence_asset_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "checked_by": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "checked_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "source_ids",
+        "evidence_asset_ids",
+        "checked_by",
+        "checked_at",
+        "notes"
+      ]
+    },
+    "Measurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "method": {
+          "enum": [
+            "laser",
+            "tape",
+            "survey_drawing",
+            "measured_polyline",
+            "timed_walk",
+            "estimate",
+            "not_measured",
+            "example"
+          ]
+        },
+        "uncertainty_m": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "value",
+        "method",
+        "uncertainty_m",
+        "source_ids"
+      ]
+    },
+    "Bearing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "deg": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "exclusiveMaximum": 360
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reference": {
+          "enum": [
+            "true_north",
+            "magnetic_north",
+            "map_axis",
+            "unknown"
+          ]
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "uncertainty_deg": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 180
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "deg",
+        "reference",
+        "method",
+        "source_ids",
+        "uncertainty_deg"
+      ]
+    },
+    "Point": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ]
+    },
+    "Device": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "enum": [
+            "photo",
+            "panorama",
+            "browser_test",
+            "measurement",
+            "other"
+          ]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "os_version": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "browser": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "browser_version": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "app_build": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "device_id",
+        "role",
+        "model",
+        "os_version",
+        "browser",
+        "browser_version",
+        "app_build"
+      ]
+    },
+    "Source": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "official_web",
+            "survey_drawing",
+            "field_measurement",
+            "operator_confirmation",
+            "phone_compass",
+            "synthetic"
+          ]
+        },
+        "locator": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checked_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "kind",
+        "locator",
+        "checked_at",
+        "notes"
+      ]
+    },
+    "Floor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "floor_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "elevation_m": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "elevation_method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "floor_id",
+        "elevation_m",
+        "elevation_method",
+        "source_ids"
+      ]
+    },
+    "Node": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "floor_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ko": {
+              "type": "string",
+              "minLength": 1
+            },
+            "en": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "ko",
+            "en"
+          ]
+        },
+        "position_m": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                },
+                "z": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "x",
+                "y",
+                "z"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "position_method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "position_uncertainty_m": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "standing_description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "area": {
+          "enum": [
+            "free",
+            "paid",
+            "unknown"
+          ]
+        },
+        "proof": {
+          "$ref": "#/$defs/Proof"
+        }
+      },
+      "required": [
+        "node_id",
+        "floor_id",
+        "name",
+        "position_m",
+        "position_method",
+        "position_uncertainty_m",
+        "standing_description",
+        "area",
+        "proof"
+      ]
+    },
+    "Edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "edge_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "from_node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to_node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "corridor",
+            "escalator",
+            "stairs",
+            "elevator",
+            "gate"
+          ]
+        },
+        "access": {
+          "enum": [
+            "open",
+            "closed",
+            "unknown"
+          ]
+        },
+        "direction_confirmed": {
+          "type": "boolean"
+        },
+        "distance_m": {
+          "$ref": "#/$defs/Measurement"
+        },
+        "heading": {
+          "$ref": "#/$defs/Bearing"
+        },
+        "polyline_m": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Point"
+          }
+        },
+        "instruction": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ko": {
+              "type": "string",
+              "minLength": 1
+            },
+            "en": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "ko",
+            "en"
+          ]
+        },
+        "proof": {
+          "$ref": "#/$defs/Proof"
+        }
+      },
+      "required": [
+        "edge_id",
+        "from_node_id",
+        "to_node_id",
+        "type",
+        "access",
+        "direction_confirmed",
+        "distance_m",
+        "heading",
+        "polyline_m",
+        "instruction",
+        "proof"
+      ]
+    },
+    "Asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "node_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "edge_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": {
+          "enum": [
+            "overview",
+            "sign_closeup",
+            "approach",
+            "panorama",
+            "route_video",
+            "bearing_reference"
+          ]
+        },
+        "dataset_split": {
+          "enum": [
+            "reference",
+            "evaluation",
+            "preview"
+          ]
+        },
+        "device_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "captured_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "approach_description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lighting": {
+          "enum": [
+            "bright",
+            "normal",
+            "dim",
+            "unknown"
+          ]
+        },
+        "crowd": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "unknown"
+          ]
+        },
+        "raw_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "derived_path": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "derived_sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "width_px": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "height_px": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "camera_height_m": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "privacy_review": {
+          "enum": [
+            "pending",
+            "clear",
+            "redacted",
+            "rejected"
+          ]
+        },
+        "projection": {
+          "enum": [
+            "perspective",
+            "equirectangular",
+            "video"
+          ]
+        },
+        "pano_alignment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PanoAlignment"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "proof": {
+          "$ref": "#/$defs/Proof"
+        }
+      },
+      "required": [
+        "asset_id",
+        "node_id",
+        "edge_id",
+        "type",
+        "dataset_split",
+        "device_id",
+        "captured_at",
+        "approach_description",
+        "lighting",
+        "crowd",
+        "raw_path",
+        "derived_path",
+        "derived_sha256",
+        "width_px",
+        "height_px",
+        "camera_height_m",
+        "privacy_review",
+        "projection",
+        "pano_alignment",
+        "proof"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "panorama"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "projection": {
+                "const": "equirectangular"
+              },
+              "pano_alignment": {
+                "$ref": "#/$defs/PanoAlignment"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "PanoAlignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reference_description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reference_bearing": {
+          "$ref": "#/$defs/Bearing"
+        },
+        "reference_viewer_yaw_deg": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "north_yaw_deg": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "second_reference_description": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "second_reference_bearing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Bearing"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "second_reference_viewer_yaw_deg": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "second_reference_residual_deg": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "horizon_levelled": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "reference_description",
+        "reference_bearing",
+        "reference_viewer_yaw_deg",
+        "north_yaw_deg",
+        "second_reference_description",
+        "second_reference_bearing",
+        "second_reference_viewer_yaw_deg",
+        "second_reference_residual_deg",
+        "horizon_levelled",
+        "notes"
+      ]
+    },
+    "Landmark": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "landmark_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sign_texts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "visible_from_node_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "direction_target_node_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "confusable_node_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "proof": {
+          "$ref": "#/$defs/Proof"
+        }
+      },
+      "required": [
+        "landmark_id",
+        "node_id",
+        "sign_texts",
+        "visible_from_node_ids",
+        "direction_target_node_ids",
+        "confusable_node_ids",
+        "proof"
+      ]
+    },
+    "HeadingSample": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "elapsed_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "event_type": {
+          "enum": [
+            "deviceorientation",
+            "deviceorientationabsolute"
+          ]
+        },
+        "absolute": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "alpha": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "beta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gamma": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "webkit_compass_heading": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "webkit_compass_accuracy": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "derived_rear_heading_deg": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "exclusiveMaximum": 360
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "elapsed_ms",
+        "event_type",
+        "absolute",
+        "alpha",
+        "beta",
+        "gamma",
+        "webkit_compass_heading",
+        "webkit_compass_accuracy",
+        "derived_rear_heading_deg"
+      ]
+    },
+    "CompassTrial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "trial_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "node_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "device_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "repeat_index": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "posture": {
+          "enum": [
+            "rear_camera_forward_portrait",
+            "flat_screen_up"
+          ]
+        },
+        "screen_angle_deg": {
+          "type": "number"
+        },
+        "reference_target_description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reference_heading": {
+          "$ref": "#/$defs/Bearing"
+        },
+        "sensor_reference": {
+          "enum": [
+            "magnetic_north",
+            "true_north",
+            "implementation_defined",
+            "unknown"
+          ]
+        },
+        "normalization_to_map_deg": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "normalization_source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "result": {
+          "enum": [
+            "readings",
+            "denied",
+            "unsupported",
+            "error"
+          ]
+        },
+        "samples": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HeadingSample"
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "trial_id",
+        "node_id",
+        "device_id",
+        "started_at",
+        "repeat_index",
+        "posture",
+        "screen_angle_deg",
+        "reference_target_description",
+        "reference_heading",
+        "sensor_reference",
+        "normalization_to_map_deg",
+        "normalization_source_ids",
+        "result",
+        "samples",
+        "notes"
+      ]
+    },
+    "LocalizationCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected_node_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "predicted_node_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "selected_node_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "elapsed_ms": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "asset_id",
+        "expected_node_id",
+        "predicted_node_ids",
+        "selected_node_id",
+        "elapsed_ms",
+        "notes"
+      ]
+    },
+    "RouteTrial": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "trial_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "device_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expected_node_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "checkpoints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LocalizationCase"
+          }
+        },
+        "wrong_turns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "false_arrival": {
+          "type": "boolean"
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "trial_id",
+        "device_id",
+        "started_at",
+        "expected_node_ids",
+        "checkpoints",
+        "wrong_turns",
+        "false_arrival",
+        "completed",
+        "notes"
+      ]
+    }
+  }
+}
