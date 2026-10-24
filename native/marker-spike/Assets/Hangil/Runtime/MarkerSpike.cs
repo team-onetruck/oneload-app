@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using Hangil.MarkerCore;
 using Unity.XR.CoreUtils;
@@ -21,6 +22,7 @@ namespace Hangil.MarkerSpike
         const string TargetName = "hangil-wall-target";
         const float TargetWidthM = 0.18f;
         readonly ExperimentLifetime lifetime = new ExperimentLifetime();
+        readonly List<ARAnchor> retiredAnchors = new List<ARAnchor>();
         ARTrackedImage observed;
         ARAnchor anchor;
         GameObject mapRoot;
@@ -126,7 +128,7 @@ namespace Hangil.MarkerSpike
                 var result = await Anchors.TryAddAnchorAsync(new Pose(image.transform.position, mapPose.rotation));
                 if (this == null || !isActiveAndEnabled || captureSessionId != sessionId || ticket != lifetime.Generation)
                 {
-                    if (result.status.IsSuccess() && result.value != null && Anchors != null) Anchors.TryRemoveAnchor(result.value);
+                    if (result.status.IsSuccess() && result.value != null) RetireAnchor(result.value);
                     return;
                 }
                 pending = false;
@@ -167,6 +169,7 @@ namespace Hangil.MarkerSpike
 
         void Update()
         {
+            ReleaseRetiredAnchors();
             if (mapRoot == null || anchor == null) return;
             double now = Time.realtimeSinceStartupAsDouble;
             bool tracking = ARSession.state == ARSessionState.SessionTracking && OriginIsIdentity() && now - lastCameraFrame <= 0.5;
@@ -196,11 +199,27 @@ namespace Hangil.MarkerSpike
             pending = false;
             if (mapRoot != null) { mapRoot.SetActive(false); Destroy(mapRoot); }
             if (arrowMesh != null) Destroy(arrowMesh);
-            if (anchor != null && Anchors != null && Anchors.subsystem != null) Anchors.TryRemoveAnchor(anchor);
+            if (anchor != null) RetireAnchor(anchor);
             anchor = null;
             mapRoot = null;
             alignmentId = null;
             status = message;
+        }
+
+        void RetireAnchor(ARAnchor value)
+        {
+            if (value != null && !retiredAnchors.Contains(value)) retiredAnchors.Add(value);
+            ReleaseRetiredAnchors();
+        }
+
+        void ReleaseRetiredAnchors()
+        {
+            // 비활성화된 매니저에서 제거 API를 호출하면 예외가 난다. 복귀 후 업데이트에서 정리한다.
+            if (Anchors == null || !Anchors.isActiveAndEnabled || Anchors.subsystem == null) return;
+            for (int i = retiredAnchors.Count - 1; i >= 0; i--)
+            {
+                if (retiredAnchors[i] == null || Anchors.TryRemoveAnchor(retiredAnchors[i])) retiredAnchors.RemoveAt(i);
+            }
         }
 
         void OnApplicationPause(bool paused) { if (paused) ClearAlignment("App paused. Scan and align again."); }
