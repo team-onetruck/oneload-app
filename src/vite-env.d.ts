@@ -9,8 +9,6 @@ declare global {
   interface ImportMetaEnv {
     // API 기본 주소. 비우면 같은 origin의 /api/v1 (배포에서는 Caddy가 /api/*를 백엔드로 넘긴다)
     readonly VITE_API_BASE_URL?: string
-    // http(기본): 백엔드 호출, mock: 서버 없이 기존 데모 규칙으로 동작
-    readonly VITE_API_MODE?: string
   }
 
   // vite.config.ts의 define이 package.json version으로 채운다. 세션 생성의 client.app_version에 쓴다.

@@ -1,57 +1,52 @@
 /**
- * Date: 2026-10-23
+ * Date: 2026-10-24
  * Author: Jung Minkyu
- * Purpose: index의 엔드포인트 함수가 호출별 옵션 인자까지 현재 ApiAdapter로 그대로 넘기는지 검증하는 단위 테스트
+ * Purpose: API 진입점이 과거 모드 설정과 관계없이 HTTP 요청을 보내고 연결 실패를 데모로 대체하지 않는지 검증한다
  */
-import { describe, expect, it } from 'vitest'
-import * as api from './index'
-import type { ApiAdapter } from './types'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-describe('index 엔드포인트 함수', () => {
-  it('마지막 옵션 인자까지 현재 어댑터로 넘긴다', async () => {
-    const received: Record<string, unknown[]> = {}
-    // 어떤 메서드를 불러도 받은 인자를 기록하고 빈 응답을 돌려주는 가짜 어댑터
-    const fake = new Proxy({} as ApiAdapter, {
-      get:
-        (_target, name: string) =>
-        (...args: unknown[]) => {
-          received[name] = args
-          return Promise.resolve({})
-        },
-    })
-    api.setApiAdapter(fake)
-    // 인자를 그대로 넘기는지만 보므로 본문 내용은 상관없다.
-    const body = {} as never
-    const options = { idempotencyKey: 'key-1', timeoutMs: 1_000 }
+const body = { language: 'ko' as const, map_id: 'seoul-station', client: { platform: 'web', app_version: 'test', ar_capable: false } }
+const created = {
+  session_id: 'ses_server', session_token: 'tok_server', expires_in_s: 7200,
+  language: 'ko', map_id: 'seoul-station', map_version: '2026-10-22.1',
+  session: { state: 'idle', revision: 1 },
+}
 
-    await api.getHealth(options)
-    await api.getMaps(options)
-    await api.getMapGraph('seoul-station', options)
-    await api.searchPois('seoul-station', 'express', options)
-    await api.createSession(body, options)
-    await api.patchSession('ses_1', body, options)
-    await api.getNavigationState('ses_1', options)
-    await api.sendMessage('ses_1', body, options)
-    await api.postLocalization('ses_1', body, options)
-    await api.confirmLocation('ses_1', body, options)
-    await api.createRoute('ses_1', body, options)
-    await api.postNavigationEvents('ses_1', body, options)
-    await api.postFeedback('ses_1', body, options)
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
+  vi.resetModules()
+})
 
-    expect(received).toEqual({
-      getHealth: [options],
-      getMaps: [options],
-      getMapGraph: ['seoul-station', options],
-      searchPois: ['seoul-station', 'express', options],
-      createSession: [body, options],
-      patchSession: ['ses_1', body, options],
-      getNavigationState: ['ses_1', options],
-      sendMessage: ['ses_1', body, options],
-      postLocalization: ['ses_1', body, options],
-      confirmLocation: ['ses_1', body, options],
-      createRoute: ['ses_1', body, options],
-      postNavigationEvents: ['ses_1', body, options],
-      postFeedback: ['ses_1', body, options],
-    })
+describe('서버 연결 API 진입점', () => {
+  it.each([undefined, 'mock', 'http'])('과거 VITE_API_MODE=%s 설정에서도 HTTP로 세션을 만든다', async (mode) => {
+    vi.resetModules()
+    vi.stubEnv('VITE_API_MODE', mode)
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(created), { status: 201 }))
+    vi.stubGlobal('fetch', fetch)
+    const api = await import('./index')
+
+    await expect(api.createSession(body, { idempotencyKey: 'session-key' })).resolves.toEqual(created)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    const [url, init] = fetch.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/v1/sessions')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body as string)).toEqual(body)
+    expect(new Headers(init.headers).get('Idempotency-Key')).toBe('session-key')
+    expect(api.getSavedSessionId()).toBe('ses_server')
+    api.clearSession()
+    expect(api.getSavedSessionId()).toBeNull()
+  })
+
+  it('서버 연결 실패는 오류를 반환하고 데모 세션을 만들지 않는다', async () => {
+    vi.resetModules()
+    vi.stubEnv('VITE_API_MODE', 'mock')
+    const fetch = vi.fn().mockRejectedValue(new TypeError('연결 실패'))
+    vi.stubGlobal('fetch', fetch)
+    const api = await import('./index')
+
+    await expect(api.createSession(body)).rejects.toMatchObject({ code: 'NETWORK' })
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(api.getSavedSessionId()).toBeNull()
   })
 })

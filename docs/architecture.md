@@ -16,17 +16,17 @@ Purpose: app의 현재(As-Is)와 목표(To-Be) 아키텍처, 기술 스택, 변�
 | agent (로컬 폴더 `infra/`) | Python, OpenAI LLM, FakeLLM 테스트, eval 17문항 | `LLMAgent`, `LLMVision`이 백엔드 규격에 맞게 구현됐지만 아직 연결 안 됨 |
 | 배포 | macserver, Caddy가 `/api/*`를 백엔드로 프록시, Tailscale Funnel | 프론트와 백엔드가 같은 origin |
 
-## 2. 현재 (2026-10-23, #25 기준): 3장의 목표 구조를 달성했다
+## 2. 현재 (2026-10-24): 서버 연결 단일화
 
-`VITE_API_MODE`(기본 `http`)로 어댑터를 고른다. http 모드는 화면의 모든 기능이 서버를 부르고, mock 모드는 같은 호출을 mock 어댑터가 서버 없이 받는다. 서버 응답(mock 모드에서는 mock 어댑터 응답)의 `session.state`·`revision`이 유일한 상태 원천이다.
+앱은 항상 HTTP 어댑터로 백엔드를 호출한다. 모드 선택과 데모 패널은 제거했다. 서버 응답의 `session.state`·`revision`이 유일한 상태 원천이다. 변경 파일과 이유는 [서버 연결 단일화](server-only.md)를 본다.
 
 ```
 app (React, 브라우저)                                    backend (FastAPI /api/v1)
   screens.tsx   화면
       ↓
-  store.tsx     상태. 서버 호출은 src/api 어댑터 하나로만 한다 (모드 분기는 src/api/index.ts 한 곳)
+  store.tsx     상태. 서버 호출은 src/api 어댑터 하나로만 한다 (src/api/index.ts에서 HTTP 어댑터 생성)
       │
-      ├─ [http] 세션 생성 · 채팅 · 언어 전환 · 목적지 목록 · 사진 위치 · 위치 확정 · 경로 · 안내 이벤트
+      └─ 세션 생성 · 채팅 · 언어 전환 · 목적지 목록 · 사진 위치 · 위치 확정 · 경로 · 안내 이벤트
       │     features/session, chat, recovery, localization, map, route
       │     → src/api (http adapter, fetch)  ──────────▶  POST /sessions
       │                                                   POST /sessions/{id}/messages
@@ -38,12 +38,10 @@ app (React, 브라우저)                                    backend (FastAPI /a
       │                                                   POST /sessions/{id}/navigation-events
       │                                                   GET  /maps/{id}/graph
       │                                                   GET  /maps/{id}/pois
-      │
-      └─ [mock] 같은 호출을 src/api/mockAdapter.ts가 서버 없이 받는다
-            assistant.ts, data.ts, route.ts, api/sessionMachine.ts로 서버와 같은 모양의 응답을 만든다
+
 ```
 
-| 백엔드 엔드포인트 | `src/api` 함수 | 화면에서 호출 (http 모드) |
+| 백엔드 엔드포인트 | `src/api` 함수 | 화면에서 호출 |
 | --- | --- | --- |
 | `POST /sessions` | `createSession` | 연결됨: 시작 화면의 Start |
 | `POST /sessions/{id}/messages` | `sendMessage` | 연결됨: 채팅 입력·칩·추천 답변, 목적지 목록 선택, "길을 잃었어요" |
@@ -56,11 +54,10 @@ app (React, 브라우저)                                    backend (FastAPI /a
 | `POST /sessions/{id}/navigation-events` | `postNavigationEvents` | 연결됨: 경로를 받으면 `navigation_started`, 도착하면 `arrived`, 안내 중 처음으로 가면 `navigation_cancelled` (`features/route/events.ts`, `flow.ts`의 `deliverEvents`). 실패해도 안내를 막지 않는다 |
 | `GET /maps/{id}/pois` | `searchPois` | 연결됨: 목적지 목록 화면에 들어오면(도착 화면에서는 표 사는 곳인지 판단할 때) 검색어 없이 지도마다 한 번 받는다 (`features/map/destinations.ts`, `graphCache.ts`의 `createMapCache`). 고른 `poi_id`를 그대로 `/messages`의 `selected_poi_id`로 보낸다 |
 | `GET /health`, `GET /maps`, `POST /sessions/{id}/feedback` | `getHealth` 등 | 화면에서 쓰지 않는다 |
-| (데모 패널) | 없음 | 사진 결과 선택과 위치 확인 화면의 데모 사진은 mock 모드에서만 보인다(`src/api/index.ts`의 `demoMode`). http 모드의 사진은 `/localizations` 응답을 따른다 |
 
-- mock 모드도 `ApiAdapter` 구현(`src/api/mockAdapter.ts`)이다. 모드 분기는 `src/api/index.ts`에서 어댑터를 고르는 한 곳뿐이고 store는 어댑터 하나만 본다. 세션 상태 기계(`src/api/sessionMachine.ts`)는 mock 어댑터와 MSW 핸들러가 함께 쓴다.
+- 테스트용 mock 어댑터는 `src/api/mockAdapter.ts`에 남아 있지만 앱 진입점에서는 가져오지 않는다. 세션 상태 기계(`src/api/sessionMachine.ts`)는 mock 어댑터와 MSW 핸들러가 함께 쓴다.
 - 단계 진행('다음')은 화면 상태로만 두고 서버에 알리지 않는다. 서버 세션의 `state`·`revision`은 경로와 안내 이벤트 응답으로 바뀐다.
-- mock 어댑터의 경로는 `route.ts`의 `findRoute`(다익스트라) 결과를 `RouteOut` 모양으로 돌려준 것이다. 화면은 http와 같은 `serverGuide`로 그린다.
+- 단위 테스트용 mock 어댑터의 경로는 `route.ts`의 `findRoute`(다익스트라) 결과를 `RouteOut` 모양으로 돌려준 것이다. 화면은 http와 같은 `serverGuide`로 그린다.
 - 백엔드 쪽은 그대로다: `RuleAgent`(키워드 규칙)와 `NoVision`(사진은 503)이 기본이고, agent 레포의 `LLMAgent`는 아직 연결되지 않았다.
 
 ## 3. To-Be: API 계층을 두고 서버를 진실로 삼는다 (달성됨, #25)
@@ -111,6 +108,6 @@ app (React, 브라우저)                                    backend (FastAPI /a
 | 헤더 검사 | `scripts/check-header.mjs` | 새 파일의 Date / Author / Purpose 확인 |
 | 타입 생성 | `scripts/gen-api.mjs` (`pnpm gen:api`) | 백엔드 OpenAPI 문서로 `src/api/schema.d.ts` 생성 |
 | 백엔드 흉내 | `src/test/handlers.ts` (MSW) | vitest와 http 모드 E2E가 같이 쓰는 `/api/v1` 핸들러. 409·503·타임아웃 스위치 |
-| E2E | `playwright.config.ts`, `e2e/` (`pnpm e2e`) | 11개. mock 프로젝트(스모크 2 + 기준선 5, 4179)와 http 프로젝트(시나리오 3 + 모드 라벨 1, 4180, `page.route`로 MSW 응답) |
-| CI | `.github/workflows/ci.yml` | push·PR마다 `pnpm verify`. e2e는 독립 job으로 11개를 돌리고, Playwright 브라우저를 버전별로 캐시해 캐시가 있으면 시스템 라이브러리 설치를 건너뛴다 |
+| E2E | `playwright.config.ts`, `e2e/` (`pnpm e2e`) | 서버 하나(4180)에서 모바일 http·desktop 프로젝트. 예전 데모 진입 차단, 서버 연동 시나리오와 카메라 안내를 MSW 응답으로 검증 |
+| CI | `.github/workflows/ci.yml` | push·PR마다 `pnpm verify`. e2e는 독립 job으로 돌리고, Playwright 브라우저를 버전별로 캐시해 캐시가 있으면 시스템 라이브러리 설치를 건너뛴다 |
 | CD | `ci.yml`의 `deploy` job | main이 CI를 통과하면 이 레포 전용 self-hosted runner(macserver)에서 oneload-infra의 공용 배포를 돌려 웹 이미지로 빌드해 올린다. 자세한 내용은 `docs/ci-cd.md` |

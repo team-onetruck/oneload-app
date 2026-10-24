@@ -13,8 +13,7 @@ export const UI = {
   start: { en: 'Start', ko: '시작하기' },
   connecting: { en: 'Connecting to Hangil…', ko: '한길에 연결하는 중…' },
   startFailed: { en: 'Couldn’t connect to Hangil. Check your connection and try again.', ko: '한길에 연결하지 못했어요. 연결을 확인하고 다시 시도해 주세요.' },
-  demoNote: { en: 'Prototype. Floors follow the AREX official guide; passages and distances await a field survey.', ko: '프로토타입이에요. 층 정보는 AREX 공식 안내 기준, 통로·거리는 현장 확인 전이에요.' },
-  liveNote: { en: 'Connected to the Hangil server. Floors follow the AREX official guide; passages and distances await a field survey.', ko: '한길 서버에 연결돼 있어요. 층 정보는 AREX 공식 안내 기준, 통로·거리는 현장 확인 전이에요.' },
+  serviceNote: { en: 'Connected to the Hangil server. Floors follow the AREX official guide; passages and distances await a field survey.', ko: '한길 서버에 연결돼 있어요. 층 정보는 AREX 공식 안내 기준, 통로·거리는 현장 확인 전이에요.' },
   station: { en: 'Seoul Station · AREX', ko: '서울역 · 공항철도' },
   askPlaceholder: { en: 'e.g. “Can I pay with a credit card?”', ko: '예: “신용카드로 낼 수 있어요?”' },
   send: { en: 'Send', ko: '보내기' },
@@ -31,7 +30,6 @@ export const UI = {
   locateTitle: { en: 'Show me a nearby sign', ko: '주변 안내판을 찍어주세요' },
   locateHint: { en: 'Signs with line names or station names work best. Please keep people out of the photo.', ko: '노선 이름이나 역 이름이 보이면 좋아요. 사람이 나오지 않게 찍어주세요.' },
   takePhoto: { en: 'Take a photo', ko: '사진 찍기' },
-  demoPhotos: { en: 'Or try a demo photo', ko: '또는 데모 사진으로 해보기' },
   pickOnList: { en: 'I know where I am, choose on list', ko: '위치를 알아요, 목록에서 고를게요' },
   reading: { en: 'Reading the signs…', ko: '안내판을 읽는 중…' },
   photoDiscarded: { en: 'The photo is deleted right after reading.', ko: '사진은 읽은 뒤 바로 삭제돼요.' },
@@ -70,8 +68,8 @@ export const UI = {
   svMissing: { en: 'No photo for this spot yet. Follow the step below or switch to the line view.', ko: '이 지점은 아직 사진이 없어요. 아래 안내를 따르거나 노선 보기로 바꿔주세요.' },
   // 서버 사진은 예시 여부(is_example)만 있고 찍은 장소 이름이 없다
   svExample: { en: 'Example photo · not Seoul Station', ko: '예시 사진 · 서울역 아님' },
-  // 라이브 뷰: 카메라 영상 위에 다음 지점 방향 화살표. 위치는 확정된 지점뿐이고 방향만 실시간이다
-  viewLive: { en: 'Live', ko: '라이브' },
+  // 카메라 안내: 카메라 영상 위에 다음 지점 방향 화살표. 위치는 확정된 지점뿐이고 방향만 실시간이다
+  viewCamera: { en: 'Camera', ko: '카메라' },
   liveIntro: { en: 'Point your camera ahead and the arrow shows which way to go.', ko: '카메라로 앞을 비추면 가야 할 방향을 화살표로 알려 드려요.' },
   livePrivacy: { en: 'The video stays on your phone and is never sent anywhere.', ko: '영상은 폰 안에서만 쓰고 어디로도 보내지 않아요.' },
   liveStart: { en: 'Turn on camera', ko: '카메라 켜기' },
@@ -115,21 +113,5 @@ export const UI = {
   errNeedLocation: { en: 'Confirm where you are first.', ko: '먼저 현재 위치를 확인해 주세요.' },
   errPhotoExpired: { en: 'The photo result expired. Please take a new photo.', ko: '사진 결과가 만료됐어요. 다시 찍어 주세요.' },
 
-  demo: { en: 'Demo', ko: '데모' },
-  demoPanel: { en: 'Demo controls', ko: '데모 설정' },
-  liveLabel: { en: 'Live', ko: '실서버' },
-  devPanel: { en: 'Dev controls', ko: '개발자 설정' },
-  failNext: { en: 'Next AI request times out', ko: '다음 AI 요청 실패시키기' },
-  uploadResult: { en: 'Result for uploaded photos', ko: '직접 올린 사진의 결과' },
-  sessionState: { en: 'Session state', ko: '세션 상태' },
-  reset: { en: 'Reset demo', ko: '데모 초기화' },
-  resetSession: { en: 'Reset session', ko: '세션 초기화' },
   close: { en: 'Close', ko: '닫기' },
 } satisfies Record<string, Text>
-
-// 상단 필, 설정 패널 제목, 시작 화면 문구. 서버 없는 데모(mock)와 서버에 연결된 모드(http)를 다르게 보여 준다.
-// 모드는 부르는 쪽이 src/api의 demoMode로 넘긴다
-export const modeCopy = (demo: boolean) =>
-  demo
-    ? { pill: UI.demo, panel: UI.demoPanel, note: UI.demoNote, reset: UI.reset }
-    : { pill: UI.liveLabel, panel: UI.devPanel, note: UI.liveNote, reset: UI.resetSession }

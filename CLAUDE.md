@@ -6,7 +6,7 @@ Purpose: Claude Code가 이 레포에서 따를 프로젝트 규칙, 검증 명�
 
 # oneload-app
 
-서울역 / 공항철도 시나리오용 한길(Hangil) 모바일 웹 데모 클라이언트. React 19 + TypeScript + Vite, pnpm.
+서울역 / 공항철도 시나리오용 한길(Hangil) 모바일 웹 클라이언트. React 19 + TypeScript + Vite, pnpm.
 제품 배경은 `PRODUCT.md`, 실행·배포는 `README.md`, 구조는 `docs/architecture.md`를 본다.
 
 ## 명령어
@@ -14,7 +14,7 @@ Purpose: Claude Code가 이 레포에서 따를 프로젝트 규칙, 검증 명�
 - `pnpm dev`: 개발 서버 (http://localhost:5173)
 - `pnpm verify`: 헤더 검사 + lint + 타입체크 + 단위 테스트. 모든 작업은 이게 통과해야 끝난 것이다.
 - `pnpm test`: vitest 1회 실행
-- `pnpm e2e`: Playwright E2E 11개. 개발 서버를 mock(4179)·http(4180) 모드로 하나씩 띄우고, http 시나리오는 `page.route`로 `/api/v1`을 MSW 핸들러가 답한다. 느려서 verify에는 넣지 않는다. 처음 한 번 `pnpm exec playwright install chromium`
+- `pnpm e2e`: 서버 연결 앱을 모바일·데스크톱에서 검증한다. 개발 서버 하나(4180)를 띄우고 `/api/v1`은 MSW로 재현한다. 처음 한 번 `pnpm exec playwright install chromium`
 - `pnpm build`: 타입체크 후 프로덕션 빌드
 
 ## 작성 규칙 (사용자 지정)
@@ -31,6 +31,8 @@ Purpose: Claude Code가 이 레포에서 따를 프로젝트 규칙, 검증 명�
 - 커밋 메시지와 PR 본문에 Claude 워터마크를 넣지 않는다 (Co-Authored-By, "Generated with Claude Code" 등).
 ## 커밋 규칙
 
+- main/master 등 통합 브랜치에 직접 커밋·push하지 않는다. 작업 브랜치에서 검증 → push → PR → 필수 CI 통과 → merge 순서를 따른다. CI가 실패하거나 대기 중이면 merge하지 않는다.
+- 여러 세션이 같은 폴더를 사용하므로 가능하면 별도 worktree를 사용하고, 다른 세션의 변경은 보존한다.
 - 커밋은 의미 단위로 쪼갠다. 한 커밋은 한 가지 이유만 담고, 되돌려도 앱이 깨지지 않아야 한다.
   (예: 타입 생성 / 클라이언트 / 화면 연결 / 테스트는 각각 따로)
 - 커밋 전에 반드시 `pnpm verify`를 통과시킨다. `--no-verify`로 우회하지 않는다.
@@ -48,8 +50,8 @@ Purpose: Claude Code가 이 레포에서 따를 프로젝트 규칙, 검증 명�
 
 ## API 연동 (작업 0~7 완료)
 
-화면의 모든 기능은 `src/api`의 `ApiAdapter`를 거친다. http 모드(기본)는 `src/api/httpAdapter.ts`로 백엔드 `/api/v1`을 부르고,
-`VITE_API_MODE=mock`이면 같은 호출을 `src/api/mockAdapter.ts`가 서버 없이 받는다. 어댑터는 `src/api/index.ts`에서 한 번 고른다.
+화면의 모든 기능은 `src/api`의 `ApiAdapter`를 거친다. `src/api/index.ts`는 항상 `src/api/httpAdapter.ts`로 백엔드 `/api/v1`을 부른다.
+데모 모드와 `VITE_API_MODE` 선택은 제거됐다. `src/api/mockAdapter.ts`는 단위 테스트에서만 직접 사용한다.
 백엔드 계약은 `../backend/app/schemas.py`이고 `/api/v1/docs`에서 볼 수 있다. 백엔드 코드는 읽기만 한다.
 구조는 `docs/architecture.md`, 기능별 동작은 `README.md`, CI/CD는 `docs/ci-cd.md`를 본다.
 
@@ -62,7 +64,7 @@ Purpose: Claude Code가 이 레포에서 따를 프로젝트 규칙, 검증 명�
 - 사진 업로드에서 `503 AI_SERVICE_UNAVAILABLE`이 오면 직접 선택 화면으로 넘기고, 위치를 추측하지 않는다.
 - 요금, 위치, 경로를 지어내지 않는다. 서버의 `unverified_notes`는 "Not verified"로 그대로 보여 준다.
 - 위치는 사용자가 명시적으로 고른 경우에만 확정한다.
-- 서버 없이도 데모가 돌도록 mock 규칙은 `src/api/mockAdapter.ts`(ApiAdapter 구현)에만 둔다. store와 화면은 어댑터만 보고 모드로 분기하지 않는다. 데모 전용 UI(데모 사진)는 `src/api/index.ts`의 `demoMode`로만 가린다.
+- 사용자 앱에 데모 진입점이나 모드 배지를 다시 추가하지 않는다. 테스트용 mock은 앱 API 진입점에서 가져오지 않는다.
 
 ### 작업 목록 (한 항목 = 한 PR, 끝나면 체크)
 
@@ -74,3 +76,5 @@ Purpose: Claude Code가 이 레포에서 따를 프로젝트 규칙, 검증 명�
 - [x] 5. 오류 복구 (409 재동기화, 타임아웃 재시도)
 - [x] 6. MSW 테스트 하네스와 Playwright 시나리오 3개
 - [x] 7. GitHub Actions에서 `pnpm verify` 실행
+
+- [x] 8. 서버 연결 단일화: 데모 진입·설정 패널·모드 배지 제거, 카메라 탭 이름 변경

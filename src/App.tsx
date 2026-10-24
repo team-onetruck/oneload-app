@@ -2,7 +2,7 @@ import { useRecovery } from './features/recovery/context'
 import { RecoveryProvider } from './features/recovery/RecoveryProvider'
 import { AppProvider, useApp } from './store'
 import {
-  Analyzing, Arrived, Candidates, Chat, DemoPanel, Destinations, ErrorNotice, Locate, Manual, RouteScreen, SessionEnded, SideMenu, Welcome,
+  Analyzing, Arrived, Candidates, Chat, Destinations, ErrorNotice, Locate, Manual, RouteScreen, SessionEnded, SideMenu, Welcome,
 } from './screens'
 
 const SCREENS = {
@@ -30,7 +30,6 @@ function Device() {
       {ended ? <SessionEnded key="ended" /> : <Screen key={screen} />}
       {!ended && <SideMenu />}
       <ErrorNotice />
-      <DemoPanel />
     </div>
   )
 }

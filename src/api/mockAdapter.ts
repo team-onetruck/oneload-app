@@ -1,7 +1,7 @@
 /**
  * Date: 2026-10-23
  * Author: Jung Minkyu
- * Purpose: 서버 없이 데모를 돌리는 ApiAdapter 구현(VITE_API_MODE=mock). 기존 mock 규칙(assistant.ts, data.ts, route.ts)을 서버 응답 모양으로 돌려준다
+ * Purpose: 단위 테스트에서 서버 응답을 재현하는 ApiAdapter 구현. 기존 mock 규칙(assistant.ts, data.ts, route.ts)을 서버 응답 모양으로 돌려준다
  */
 import { classify, render } from '../assistant'
 import type { Intent, Reply, Tip } from '../assistant'
