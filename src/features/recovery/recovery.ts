@@ -57,7 +57,7 @@ const NOTICE: Partial<Record<ApiErrorCode, { reason: NoticeReason; actions: Reco
   NETWORK: { reason: 'network', actions: ['retry', 'manual'] },
   // 409: withRevisionResync가 한 번 다시 맞춰 보낸 뒤에도 충돌한 경우만 여기 온다
   REVISION_CONFLICT: { reason: 'conflict', actions: ['retry', 'home'] },
-  // 503: 사진을 읽을 수 없으니 위치를 추측하지 않고 목록에서 고르게 한다 (CLAUDE.md)
+  // 503: 사진을 읽을 수 없으니 위치를 추측하지 않고 목록에서 고르게 한다
   AI_SERVICE_UNAVAILABLE: { reason: 'ai_unavailable', actions: ['manual', 'retry'] },
   // 400: Idempotency-Key 누락 같은 클라이언트 버그. 사용자에게는 일반 오류로 보인다.
   // 다시 보내도 같은 400일 수 있어 처음으로를 함께 준다
