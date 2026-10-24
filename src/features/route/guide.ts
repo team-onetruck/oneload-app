@@ -7,6 +7,8 @@ import type { GraphOut, RouteOut } from '../../api/types'
 import type { Text } from '../../data'
 import { UI } from '../../i18n'
 import type { PlaceView } from '../localization/views'
+import { toArRoute } from '../ar/route'
+import type { ArRoute } from '../ar/route'
 import { arrowYawDeg, toSteps } from './toSteps'
 import type { RouteStepView } from './toSteps'
 
@@ -15,6 +17,8 @@ export interface ActiveRoute {
   routeId: string
   routeRevision: number
   destinationPoiId: string
+  // 서버 waypoint 좌표·지도 버전을 보존한다. 검증 실패 시 바닥 AR용 기하는 제공하지 않는다.
+  arGeometry: ArRoute | null
   // 출발부터 도착까지 노드와 층(waypoints). 경로와 waypoints가 맞지 않으면 층은 null
   stops: { nodeId: string; floorId: string | null }[]
   steps: RouteStepView[]
@@ -26,6 +30,7 @@ export function toActiveRoute(out: RouteOut, graph?: Pick<GraphOut, 'edges' | 'p
     routeId: out.route_id,
     routeRevision: out.route_revision,
     destinationPoiId: out.destination_poi_id,
+    arGeometry: toArRoute(out),
     stops: out.path_node_ids.map((nodeId, i) => ({ nodeId, floorId: floors[i] ?? null })),
     steps: toSteps(out, graph),
   }
