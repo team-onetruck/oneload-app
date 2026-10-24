@@ -1,0 +1,16 @@
+/Library/
+/Temp/
+/Obj/
+/Logs/
+/UserSettings/
+/Builds/
+/.vs/
+/*.csproj
+/*.sln
+/TestResults/
+/obj/
+/bin/
+/CoreChecks/obj/
+/CoreChecks/bin/
+/Assets/Hangil/Generated/
+/Assets/Hangil/Generated.meta

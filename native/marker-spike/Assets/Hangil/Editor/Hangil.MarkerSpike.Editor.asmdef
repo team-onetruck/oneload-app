@@ -1,0 +1,5 @@
+{
+  "name": "Hangil.MarkerSpike.Editor",
+  "references": ["Hangil.MarkerSpike", "Unity.XR.ARFoundation", "Unity.XR.ARSubsystems", "Unity.XR.ARSubsystems.Editor", "Unity.XR.CoreUtils", "Unity.XR.Management", "Unity.XR.Management.Editor", "Unity.InputSystem"],
+  "includePlatforms": ["Editor"]
+}
