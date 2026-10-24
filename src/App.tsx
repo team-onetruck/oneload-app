@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { useRecovery } from './features/recovery/context'
 import { RecoveryProvider } from './features/recovery/RecoveryProvider'
 import { AppProvider, useApp } from './store'
@@ -16,6 +17,8 @@ const SCREENS = {
   route: RouteScreen,
   arrived: Arrived,
 }
+
+const SurveyPage = lazy(() => import('./features/survey/SurveyPage'))
 
 function Device() {
   const { screen, lang } = useApp()
@@ -36,6 +39,8 @@ function Device() {
 }
 
 export default function App() {
+  if (window.location.pathname.replace(/\/$/, '') === '/survey/sensors')
+    return <Suspense fallback={<p role="status">답사 기록 화면을 불러오는 중입니다.</p>}><SurveyPage /></Suspense>
   // store가 fail()을 쓸 수 있도록 RecoveryProvider를 AppProvider 바깥에 둔다
   return (
     <RecoveryProvider>
