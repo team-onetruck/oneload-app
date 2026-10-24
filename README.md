@@ -94,6 +94,10 @@ E2E는 11개이고 `playwright.config.ts`의 두 프로젝트로 나뉜다.
 mock 기준선 5개(`e2e/mock/`)는 서버 없는 데모 흐름이 그대로인지, `/api`로 나가는 요청이 없는지 본다.
 그래서 실서버에서 채팅 → 사진 → 경로 전체 흐름이 동작한다는 증거는 아니다. 자세한 범위는 [docs/ci-cd.md의 검증 범위](docs/ci-cd.md#검증-범위-무엇을-증명하고-무엇을-증명하지-않는가)를 본다.
 
+## 답사용 방향 센서 기록
+
+같은 앱 주소의 `/survey/sensors`에서 지점·기기·자세·반복 회차와 방향 이벤트를 기록하고 수집 스키마 1.0.0의 JSON을 다운로드한다. HTTPS에서 사용하며 권한 거절·화면 숨김·회전·미지원도 결과로 남긴다. 브라우저 임시 저장·기존 JSON 불러오기를 지원하고 기록은 서버에 보내지 않는다. [사용·검증 절차](docs/sensor-survey.md)를 참고한다.
+
 ## Deploy (macserver)
 
 Merging to `main` deploys automatically: once CI passes, its `deploy` job runs oneload-infra's shared deploy on this repo's own self-hosted runner on macserver, which builds `main` into the `hangil-web` image (see [docs/ci-cd.md](docs/ci-cd.md)). Caddy in that image serves the build (zstd/gzip, immutable cache for `/assets`), proxies `/api/*` to the backend and serves `/panos/*` from [oneload-data](https://github.com/team-onetruck/oneload-data); Tailscale Funnel exposes all of it at `https://baki-macbookpro.tail3286a4.ts.net:10000/`. The server setup lives in [oneload-infra](https://github.com/team-onetruck/oneload-infra).
