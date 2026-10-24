@@ -8,5 +8,5 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: 'e2e', testMatch: 'scenarios/sensor-survey.spec.ts', fullyParallel: true,
   use: { ...devices['Pixel 7'], baseURL: 'http://localhost:4185', trace: 'retain-on-failure' },
-  webServer: { command: 'pnpm exec vite --port 4185 --strictPort', url: 'http://localhost:4185', reuseExistingServer: false },
+  webServer: { command: 'node node_modules/vite/bin/vite.js --port 4185 --strictPort', url: 'http://localhost:4185', reuseExistingServer: false },
 })

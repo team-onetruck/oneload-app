@@ -57,8 +57,6 @@ pnpm build
 
 독립 E2E 설정은 포트 4185를 사용한다. 기본 CI의 http 프로젝트도 scenarios/sensor-survey.spec.ts를 실행한다. 합성 iOS 확장·Android 절대 이벤트를 주입해 원본 저장·다운로드 스키마·복구·권한 거절·화면 숨김을 확인한다. E2E JSON은 test-results에 생성되며 Git에 넣지 않는다.
 
-Windows Node 24가 전역 navigator.languages=ko-KR를 제공하면 기존 언어 기본값 단위 테스트가 en 기대값과 충돌한다. 로컬 검증 때는 NODE_OPTIONS=--no-experimental-global-navigator를 적용해 브라우저가 없는 기존 테스트 환경을 사용했다. 제품 언어 동작은 변경하지 않았다.
-
 실제 iPhone Safari/Android Chrome의 권한창·센서 주기·축 규약·정확도·다운로드/파일 앱 동작은 해당 휴대폰에서 HTTPS로 확인해야 한다. 합성 이벤트 테스트를 실기기·서울역 정확도 검증으로 취급하지 않는다.
 
 근거: [W3C 방향 이벤트](https://www.w3.org/TR/orientation-event/), [Apple 자북 방위](https://developer.apple.com/documentation/webkitjs/deviceorientationevent/1804777-webkitcompassheading), [Ajv Draft 2020-12](https://ajv.js.org/json-schema.html).
