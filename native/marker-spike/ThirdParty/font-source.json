@@ -1,0 +1,11 @@
+{
+  "source": "https://github.com/google/fonts/tree/main/ofl/notosanskr",
+  "source_sha256": "194018e6b2b293a7964f037b25c0249ce1418bc9ab3c971060a03aa57861e252",
+  "subset_sha256": "ef1c16766d588237958b39fe67b9d19f342f0fe2502973e9b9f356e44acf8071",
+  "family": "Hangil UI",
+  "weight": 400,
+  "license": "SIL Open Font License 1.1",
+  "characters": " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~·–…→가간감값갱거검게결겼계고곳공과관교국권귀규그급기긴길까끝나난났내너높놓는늦니닌님다닥단달답대던데도동돼되된될뒤드들때라런렌려력로록료를리린림마만말맞매멈메며면모목못무물미바밝방버번범법벗벽변복부불붙비사산살상생서선설성세소속쇄수숨스습승시신실심아안않았앞앱앵야어업없었에여열영예오와외요용운움원월위유으은을음응의이인잃임입있자작잠장재쟀저적전점접정제졌존종좌주준줄중즈증지직질쪽찾채처천체쳤초촬최추출춰췄취측치카커크타태터트평포폰표품필하한할합해했향허험호화확환활회효후휴히",
+  "bytes": 57128,
+  "modification": "Static weight 400, UI character subset, renamed family; rebuild when UI text changes."
+}

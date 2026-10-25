@@ -70,6 +70,8 @@ namespace Hangil.MarkerSpike.Editor
             var camera = cameraObject.AddComponent<Camera>();
             camera.nearClipPlane = 0.05f;
             camera.farClipPlane = 30;
+            camera.allowHDR = false;
+            camera.allowMSAA = false;
             origin.Camera = camera;
             var cameraManager = cameraObject.AddComponent<ARCameraManager>();
             cameraObject.AddComponent<ARCameraBackground>();
@@ -79,6 +81,7 @@ namespace Hangil.MarkerSpike.Editor
             driver.trackingStateInput = new InputActionProperty(new InputAction("Head Tracking", InputActionType.Value, "<XRHMD>/trackingState"));
             var imageManager = originObject.AddComponent<ARTrackedImageManager>();
             imageManager.referenceLibrary = library;
+            imageManager.requestedMaxNumberOfMovingImages = 1;
             var anchorManager = originObject.AddComponent<ARAnchorManager>();
             var experiment = originObject.AddComponent<global::Hangil.MarkerSpike.MarkerSpike>();
             experiment.Session = session;

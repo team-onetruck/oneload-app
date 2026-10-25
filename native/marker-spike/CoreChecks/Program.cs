@@ -51,6 +51,23 @@ static class Program
             Check("3미터 실험 한도", !life.CanRender(life.Generation, true, true, 1, 3.1));
             life.Accept(life.Generation);
             Check("알 수 없는 시각 거부", !life.CanRender(life.Generation, true, true, double.NaN, 1));
+            float height, distance;
+            Check("실측 높이 미입력 시 진행 차단", !ExperimentGuide.TryMeasurements("", "1.00", out height, out distance));
+            Check("소수점 쉼표 키보드 지원", ExperimentGuide.TryMeasurements("1,25", "0,80", out height, out distance) && Near(height, 1.25) && Math.Abs(distance - 0.8) < 0.00001);
+            foreach (string invalid in new[] { "NaN", "Infinity", "1e2", "1,200.00", "-1", "0", "2.51", "1..2" })
+                Check("잘못된 높이 거부 " + invalid, !ExperimentGuide.TryMeasurements(invalid, "1", out height, out distance));
+            Check("거리 상한 확인", !ExperimentGuide.TryMeasurements("1.2", "2.01", out height, out distance));
+            Check("입력 경계 포함", ExperimentGuide.TryMeasurements("0.3", "2", out height, out distance));
+            Check("준비된 경우만 진행", ExperimentGuide.State(false, false, false, true, true, true, true, true, true, true, true, true) == GuideState.Ready);
+            Check("미확인 측정 진행 금지", ExperimentGuide.State(false, false, false, true, false, true, true, true, true, true, true, true) == GuideState.Confirmation);
+            Check("카메라 권한 복구 안내", ExperimentGuide.State(false, false, false, true, true, false, true, true, true, true, true, true) == GuideState.Permission);
+            Check("지원 안됨 안내 우선", ExperimentGuide.State(false, false, false, true, true, false, false, true, true, true, true, true) == GuideState.Unsupported);
+            Check("카메라 공급 중단 차단", ExperimentGuide.State(false, false, false, true, true, true, true, true, false, true, true, true) == GuideState.Camera);
+            Check("잘못된 그림 자세 차단", ExperimentGuide.State(false, false, false, true, true, true, true, true, true, true, true, false) == GuideState.MarkerPose);
+            Check("비동기 생성 중 중복 시작 금지", ExperimentGuide.State(false, false, true, true, true, true, true, true, true, true, true, true) == GuideState.CreatingAnchor);
+            Check("앵커 최초 추적 전 숨김 안내", ExperimentGuide.State(false, true, false, true, true, true, true, true, true, true, true, true) == GuideState.WaitingAnchor);
+            foreach (GuideState state in Enum.GetValues(typeof(GuideState)))
+                Check("모든 상태의 한영 복구 안내 " + state, !string.IsNullOrWhiteSpace(ExperimentGuide.Hint(state, true)) && !string.IsNullOrWhiteSpace(ExperimentGuide.Hint(state, false)));
             Console.WriteLine("C# 공통 로직 " + checks + "개 통과. Unity·Android 런타임 검증은 포함하지 않습니다.");
             return 0;
         }

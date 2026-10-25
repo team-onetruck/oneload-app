@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using Hangil.MarkerCore;
 using Unity.XR.CoreUtils;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
@@ -21,6 +21,8 @@ namespace Hangil.MarkerSpike
 
         const string TargetName = "hangil-wall-target";
         const float TargetWidthM = 0.18f;
+        static readonly ProfilerMarker FrameMarker = new ProfilerMarker("Hangil.Marker.Frame");
+        static readonly ProfilerMarker HudMarker = new ProfilerMarker("Hangil.Marker.Hud");
         readonly ExperimentLifetime lifetime = new ExperimentLifetime();
         readonly List<ARAnchor> retiredAnchors = new List<ARAnchor>();
         ARTrackedImage observed;
@@ -29,9 +31,8 @@ namespace Hangil.MarkerSpike
         Mesh arrowMesh;
         string sessionId;
         string alignmentId;
-        string status = "Scan the printed target, upright on a wall.";
-        string heightText = "1.20";
-        string distanceText = "1.00";
+        MarkerHud hud;
+        string koNotice, enNotice;
         float markerHeightM;
         float arrowDistanceM;
         double alignedAt;
@@ -40,12 +41,27 @@ namespace Hangil.MarkerSpike
         Vector3 cameraAtAlignment;
         Vector3 markerMap;
         bool pending;
-        bool measurementsConfirmed;
-        bool quitting;
+        GameObject arrow;
+        double nextHudUpdate;
+        double anchorRequestedAt;
+        double enabledAt;
+
+        void Awake()
+        {
+            hud = gameObject.AddComponent<MarkerHud>();
+            hud.AlignRequested += Align;
+            hud.ResetRequested += Retry;
+            hud.MeasurementsChanged += OnMeasurementsChanged;
+            // One immutable mesh per experiment lifetime, reused across all realignments.
+            BuildArrow();
+        }
 
         void OnEnable()
         {
             sessionId = Guid.NewGuid().ToString();
+            enabledAt = Time.realtimeSinceStartupAsDouble;
+            nextHudUpdate = 0;
+            hud.SetVisible(true);
             Images.trackablesChanged.AddListener(OnImages);
             CameraManager.frameReceived += OnCameraFrame;
             ARSession.stateChanged += OnSessionState;
@@ -56,7 +72,8 @@ namespace Hangil.MarkerSpike
             Images.trackablesChanged.RemoveListener(OnImages);
             CameraManager.frameReceived -= OnCameraFrame;
             ARSession.stateChanged -= OnSessionState;
-            ClearAlignment("Experiment stopped. Scan and align again.");
+            ClearAlignment("실험을 멈췄어요. 그림을 다시 비춰 주세요.", "Experiment stopped. Scan the picture again.");
+            hud.SetVisible(false);
         }
 
         void OnCameraFrame(ARCameraFrameEventArgs args)
@@ -71,7 +88,7 @@ namespace Hangil.MarkerSpike
             {
                 sessionId = Guid.NewGuid().ToString();
                 observed = null;
-                ClearAlignment("Session not tracking. Scan and align again.");
+                ClearAlignment("공간 추적이 중단되어 화살표를 숨겼어요.", "Tracking stopped. The arrow has been hidden.");
             }
         }
 
@@ -99,9 +116,22 @@ namespace Hangil.MarkerSpike
 
         bool CanAlign()
         {
-            if (!measurementsConfirmed || pending || observed == null || observed.trackingState != TrackingState.Tracking ||
-                ARSession.state != ARSessionState.SessionTracking || !OriginIsIdentity() ||
-                Time.realtimeSinceStartupAsDouble - lastCameraFrame > 0.5 || Anchors.subsystem == null) return false;
+            return Guide() == GuideState.Ready;
+        }
+
+        GuideState Guide()
+        {
+            bool measurements = ExperimentGuide.TryMeasurements(hud.Height, hud.Distance, out markerHeightM, out arrowDistanceM);
+            bool tracked = observed != null && observed.trackingState == TrackingState.Tracking;
+            return ExperimentGuide.State(mapRoot != null && mapRoot.activeSelf, mapRoot != null, pending,
+                measurements, hud.Confirmed, CameraManager.permissionGranted || Time.realtimeSinceStartupAsDouble - enabledAt < 8,
+                ARSession.state != ARSessionState.Unsupported,
+                ARSession.state == ARSessionState.SessionTracking && Anchors.subsystem != null,
+                Time.realtimeSinceStartupAsDouble - lastCameraFrame <= 0.5, OriginIsIdentity(), tracked, tracked && MarkerUpright());
+        }
+
+        bool MarkerUpright()
+        {
             // Unity의 추적 이미지 +y는 앞면 법선, +z는 인쇄물 위쪽이다. 원시 ARCore 포즈가 아니다.
             return Vector3.Angle(observed.transform.forward, Vector3.up) <= 10 &&
                 Mathf.Abs(Vector3.Dot(observed.transform.up, Vector3.up)) < 0.18f &&
@@ -110,9 +140,10 @@ namespace Hangil.MarkerSpike
 
         async void Align()
         {
-            if (!CanAlign()) return;
-            ClearAlignment("Creating a native AR anchor...");
+            if (!isActiveAndEnabled || !CanAlign()) return;
+            ClearAlignment(null, null);
             pending = true;
+            anchorRequestedAt = Time.realtimeSinceStartupAsDouble;
             int ticket = lifetime.Generation;
             string captureSessionId = sessionId;
             var image = observed;
@@ -134,34 +165,37 @@ namespace Hangil.MarkerSpike
                 pending = false;
                 if (!result.status.IsSuccess() || result.value == null)
                 {
-                    ClearAlignment("Anchor creation failed. Try scanning again.");
+                    ClearAlignment("위치를 고정하지 못했어요. 밝은 곳에서 다시 시도하세요.", "Could not place the arrow. Try again in a well-lit area.");
                     return;
                 }
                 anchor = result.value;
                 if (image == null || image.trackingState != TrackingState.Tracking || !OriginIsIdentity())
                 {
-                    ClearAlignment("Marker or origin changed while creating anchor.");
+                    ClearAlignment("그림을 놓쳤어요. 그림 전체를 비추고 다시 시도하세요.", "Picture lost. Scan the whole picture and try again.");
                     return;
                 }
                 mapRoot = new GameObject("MapRootInAnchor");
                 mapRoot.transform.SetPositionAndRotation(mapPose.position, mapPose.rotation);
                 // 월드 포즈를 유지해 앵커 상대 변환을 한 번만 저장한다. 이후 앵커 갱신은 부모가 처리한다.
                 mapRoot.transform.SetParent(anchor.transform, true);
-                BuildArrow(mapRoot.transform, arrowDistanceM);
+                if (arrow == null) BuildArrow();
+                arrow.transform.SetParent(mapRoot.transform, false);
+                arrow.transform.localPosition = new Vector3(0, 0.01f, arrowDistanceM);
+                arrow.SetActive(true);
                 mapRoot.SetActive(false);
                 alignmentId = Guid.NewGuid().ToString();
                 cameraAtAlignment = Origin.Camera.transform.position;
                 alignedAt = Time.realtimeSinceStartupAsDouble;
                 anchorEverTracked = false;
                 lifetime.Accept(ticket);
-                status = "EXPERIMENT ONLY: compare the arrow with your floor tape.";
+                koNotice = enNotice = null;
                 Debug.Log("[HangilMarker] aligned session=" + sessionId + " alignment=" + alignmentId + " anchor=" + anchor.trackableId + " quality=unverified");
             }
             catch (Exception error)
             {
                 if (this != null && ticket == lifetime.Generation)
                 {
-                    ClearAlignment("Alignment failed. See device log.");
+                    ClearAlignment("위치를 맞추지 못했어요. 그림을 다시 비추고 재시도하세요.", "Placement failed. Scan the picture and try again.");
                     Debug.LogException(error);
                 }
             }
@@ -169,9 +203,27 @@ namespace Hangil.MarkerSpike
 
         void Update()
         {
+            using (FrameMarker.Auto()) UpdateExperiment();
+        }
+
+        void UpdateExperiment()
+        {
             ReleaseRetiredAnchors();
-            if (mapRoot == null || anchor == null) return;
             double now = Time.realtimeSinceStartupAsDouble;
+            // A hung provider must not lock the only action indefinitely. Late results still use the generation guard.
+            if (pending && now - anchorRequestedAt > 8)
+                ClearAlignment("응답이 늦어 취소했어요. 다시 시도할 수 있어요.", "Placement timed out. You can try again.");
+            if (now >= nextHudUpdate)
+            {
+                nextHudUpdate = now + 0.25;
+                using (HudMarker.Auto())
+                    hud.Present(Guide(), koNotice, enNotice, mapRoot != null ? 30 - (now - alignedAt) : 0);
+            }
+            if (mapRoot == null || anchor == null)
+            {
+                if (lifetime.Active) ClearAlignment("고정 위치를 잃었어요. 그림을 다시 맞춰 주세요.", "Anchor lost. Scan and realign the picture.");
+                return;
+            }
             bool tracking = ARSession.state == ARSessionState.SessionTracking && OriginIsIdentity() && now - lastCameraFrame <= 0.5;
             bool anchorTracking = anchor.trackingState == TrackingState.Tracking;
             // 앵커가 처음 유효해질 때까지는 숨긴 채 기다린다. 한번 유효했던 앵커의 유실에는 적용하지 않는다.
@@ -180,30 +232,36 @@ namespace Hangil.MarkerSpike
             double travel = Vector3.Distance(cameraAtAlignment, Origin.Camera.transform.position);
             if (!lifetime.CanRender(lifetime.Generation, tracking, anchorTracking, now - alignedAt, travel))
             {
-                ClearAlignment("Tracking/anchor/time/distance invalid. Scan and align again.");
+                if (now - alignedAt > 30)
+                    ClearAlignment("30초 확인을 마쳤어요. 계속하려면 그림을 다시 맞추세요.", "30-second check complete. Realign to continue.");
+                else if (travel > 3)
+                    ClearAlignment("확인 범위 3m를 벗어났어요. 그림 가까이에서 다시 맞추세요.", "Beyond the 3m test range. Return to the picture and realign.");
+                else
+                    ClearAlignment("추적이 불안정해 화살표를 숨겼어요. 바닥과 그림을 다시 비춰 주세요.", "Tracking became unreliable. Arrow hidden. Scan the floor and picture again.");
                 return;
             }
             // 인쇄물을 움직이면 기존 바닥 좌표가 무효다. 마커가 다시 관측될 때만 비교한다.
             if (observed != null && observed.trackingState == TrackingState.Tracking &&
                 Vector3.Distance(mapRoot.transform.TransformPoint(markerMap), observed.transform.position) > 0.15f)
             {
-                ClearAlignment("Marker moved or alignment drifted. Align again.");
+                ClearAlignment("그림 위치가 달라졌어요. 실측 위치를 확인하고 다시 맞추세요.", "Picture position changed. Check the setup and realign.");
                 return;
             }
-            mapRoot.SetActive(true);
+            if (!mapRoot.activeSelf) { mapRoot.SetActive(true); nextHudUpdate = 0; }
         }
 
-        void ClearAlignment(string message)
+        void ClearAlignment(string ko, string en)
         {
             lifetime.Reset();
             pending = false;
+            if (arrow != null) { arrow.SetActive(false); arrow.transform.SetParent(transform, false); }
             if (mapRoot != null) { mapRoot.SetActive(false); Destroy(mapRoot); }
-            if (arrowMesh != null) Destroy(arrowMesh);
             if (anchor != null) RetireAnchor(anchor);
             anchor = null;
             mapRoot = null;
             alignmentId = null;
-            status = message;
+            koNotice = ko; enNotice = en;
+            nextHudUpdate = 0;
         }
 
         void RetireAnchor(ARAnchor value)
@@ -222,15 +280,36 @@ namespace Hangil.MarkerSpike
             }
         }
 
-        void OnApplicationPause(bool paused) { if (paused) ClearAlignment("App paused. Scan and align again."); }
-        void OnApplicationFocus(bool focused) { if (!focused) ClearAlignment("App lost focus. Scan and align again."); }
-        void OnApplicationQuit() { quitting = true; }
+        void Retry()
+        {
+            bool reviewing = !pending && mapRoot == null;
+            ClearAlignment(null, null);
+            observed = null;
+            if (reviewing) hud.RecheckMeasurements();
+        }
 
-        void BuildArrow(Transform parent, float forwardM)
+        void OnMeasurementsChanged()
+        {
+            if (pending || mapRoot != null) ClearAlignment(null, null);
+            else { koNotice = enNotice = null; nextHudUpdate = 0; }
+        }
+
+        void OnApplicationPause(bool paused) { if (paused) ClearAlignment("앱을 다시 열었어요. 그림을 다시 맞춰 주세요.", "App interrupted. Realign the picture to continue."); }
+        void OnApplicationFocus(bool focused) { if (!focused) ClearAlignment("화면을 벗어나 화살표를 숨겼어요. 그림을 다시 맞춰 주세요.", "App lost focus. Arrow hidden. Realign to continue."); }
+
+        void OnDestroy()
+        {
+            if (arrowMesh != null) Destroy(arrowMesh);
+        }
+
+        void BuildArrow()
         {
             var go = new GameObject("FixedFloorArrow");
-            go.transform.SetParent(parent, false);
-            go.transform.localPosition = new Vector3(0, 0.01f, forwardM);
+            arrow = go;
+            go.transform.SetParent(transform, false);
+            go.SetActive(false);
+            if (arrowMesh == null)
+            {
             var mesh = new Mesh();
             arrowMesh = mesh;
             mesh.name = "HangilFloorArrow";
@@ -241,34 +320,12 @@ namespace Hangil.MarkerSpike
             mesh.triangles = new[] {0,2,1,1,2,3,4,6,5,0,1,2,1,3,2,4,5,6};
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
-            go.AddComponent<MeshFilter>().sharedMesh = mesh;
-            go.AddComponent<MeshRenderer>().sharedMaterial = ArrowMaterial;
-        }
-
-        void OnGUI()
-        {
-            if (quitting) return;
-            var old = GUI.matrix;
-            float scale = Screen.width / 500f;
-            GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1));
-            GUILayout.BeginArea(new Rect(12, 30, 476, 480), GUI.skin.box);
-            GUILayout.Label("HANGIL MARKER LAB / NOT NAVIGATION");
-            GUILayout.Label("Accuracy unverified. Target width: 18.0 cm.");
-            GUILayout.Label(status);
-            GUI.enabled = !pending && mapRoot == null;
-            GUILayout.Label("Measured marker centre height above floor (m)");
-            heightText = GUILayout.TextField(heightText);
-            GUILayout.Label("Arrow centre distance outward from wall (m)");
-            distanceText = GUILayout.TextField(distanceText);
-            measurementsConfirmed = GUILayout.Toggle(measurementsConfirmed, "I measured the print width, height and floor point.");
-            bool numbers = float.TryParse(heightText, NumberStyles.Float, CultureInfo.InvariantCulture, out markerHeightM) && markerHeightM >= 0.3f && markerHeightM <= 2.5f &&
-                float.TryParse(distanceText, NumberStyles.Float, CultureInfo.InvariantCulture, out arrowDistanceM) && arrowDistanceM >= 0.3f && arrowDistanceM <= 2f;
-            GUI.enabled = numbers && CanAlign();
-            if (GUILayout.Button("ALIGN MARKER - SHOW TEST ARROW", GUILayout.Height(48))) Align();
-            GUI.enabled = true;
-            if (GUILayout.Button("HIDE / REALIGN", GUILayout.Height(42))) ClearAlignment("Scan and align again.");
-            GUILayout.EndArea();
-            GUI.matrix = old;
+            }
+            go.AddComponent<MeshFilter>().sharedMesh = arrowMesh;
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = ArrowMaterial;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
         }
 
         static Point3 ToPoint(Vector3 v) { return new Point3(v.x, v.y, v.z); }
