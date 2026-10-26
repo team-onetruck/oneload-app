@@ -30,6 +30,11 @@ export const UI = {
   // 서버가 지금 서 있는 곳을 목적지로 다시 정했을 때 말풍선에 붙인다
   hereTickets: { en: 'You’re already at the ticket counter.', ko: '지금 계신 곳이 표 사는 곳이에요.' },
   herePlace: { en: 'You’re already here.', ko: '지금 계신 곳이 목적지예요.' },
+  // 승강장 도착 화면. 열차별 타는 곳은 데이터에 없어서 단정하지 않고 역 전광판에 맡긴다
+  platformBoard: {
+    en: 'Each train may leave from a different track. Check the departure board for the next train’s time and track.',
+    ko: '열차마다 타는 곳이 다를 수 있어요. 전광판에서 다음 열차의 출발 시각과 타는 곳을 확인하세요.',
+  },
   retry: { en: 'Try again', ko: '다시 시도' },
   pickDest: { en: 'Choose from list', ko: '목록에서 선택' },
 

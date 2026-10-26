@@ -2,12 +2,12 @@
  * Date: 2026-10-26
  * Author: Jung Minkyu
  * Purpose: 표 사는 곳 도착 뒤 시나리오 E2E. 서버가 지금 서 있는 표 사는 곳을 다시 목적지로 정해도 길안내를 권하지 않고,
- *          '표를 샀어요 · 승강장으로'를 누르면 승강장 경로를 받는지 확인한다
+ *          '표를 샀어요 · 승강장으로'를 누르면 승강장 경로를 받아, 승강장 도착 화면에서 전광판을 확인하게 하는지 본다
  */
 import { expect, test } from '@playwright/test'
 import { interceptApi, signPhoto } from '../support/mockApi'
 
-test('표 사는 곳 도착: 같은 곳으로 다시 안내하지 않고, 표를 샀다고 알리면 승강장으로 간다', async ({ page }) => {
+test('표 사는 곳 도착: 같은 곳으로 다시 안내하지 않고, 표를 샀다고 알리면 승강장으로 가서 전광판을 확인하게 한다', async ({ page }) => {
   const api = await interceptApi(page)
   await page.goto('/')
 
@@ -25,6 +25,8 @@ test('표 사는 곳 도착: 같은 곳으로 다시 안내하지 않고, 표를
   // 표 사는 곳에서는 표를 샀다고 알리는 버튼이 먼저, 사는 법 묻기가 다음이다
   const arrivedButtons = page.locator('.screen.arrived .btn')
   await expect(arrivedButtons).toHaveText(['I have my ticket · To the platform', 'How do I buy a ticket?'])
+  const board = page.getByText('Check the departure board for the next train’s time and track.', { exact: false })
+  await expect(board).toHaveCount(0)
   await page.getByRole('button', { name: 'How do I buy a ticket?' }).click()
   await expect(page.getByText('To buy an Express ticket:')).toBeVisible()
 
@@ -38,6 +40,14 @@ test('표 사는 곳 도착: 같은 곳으로 다시 안내하지 않고, 표를
   await page.getByRole('button', { name: 'Start directions' }).click()
   await expect(page.getByRole('heading', { name: 'Express train platform' })).toBeVisible()
   await expect(page.getByText('Go through the express train gates with your ticket.')).toBeVisible()
+
+  // 승강장에 도착하면 열차별 타는 곳을 단정하지 않고 전광판을 확인하게 한다. 표 사는 법 버튼은 없다
+  await page.getByRole('button', { name: 'Next' }).click()
+  await page.getByRole('button', { name: 'I’m here' }).click()
+  await expect(page.getByRole('heading', { name: 'You’ve arrived' })).toBeVisible()
+  await expect(page.locator('.arrived-place')).toContainText('Express train platform')
+  await expect(board).toBeVisible()
+  await expect(page.getByRole('button', { name: 'How do I buy a ticket?' })).toHaveCount(0)
 
   const sent = api.mutations()
   const messages = sent.filter((c) => c.path === '/sessions/{id}/messages')

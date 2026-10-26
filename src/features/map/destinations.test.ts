@@ -16,7 +16,7 @@ import { categoryText, destinationViews } from './destinations'
 import { createMapCache } from './graphCache'
 
 describe('destinationViews', () => {
-  it('서버 POI의 노드, 이름(ko·en), 층, 열차, 확인 여부를 그대로 옮기고 표 사는 곳을 표시한다', async () => {
+  it('서버 POI의 노드, 이름(ko·en), 층, 열차, 확인 여부를 그대로 옮기고 표 사는 곳·승강장을 표시한다', async () => {
     // MSW가 백엔드처럼 확인된 POI만 돌려준다
     const api = createHttpAdapter(createApiClient({ baseUrl: 'http://api.test/api/v1', storage: null }))
     const views = destinationViews(await api.searchPois(MAP_ID))
@@ -30,8 +30,10 @@ describe('destinationViews', () => {
       train: 'express',
       verified: true,
       tickets: true,
+      platform: false,
     })
     expect(views.filter((v) => v.tickets).map((v) => v.poiId)).toEqual(['poi-express-tickets', 'poi-allstop-tickets'])
+    expect(views.filter((v) => v.platform).map((v) => v.poiId)).toEqual(['poi-express-platform', 'poi-allstop-platform'])
   })
 
   it('확인되지 않은 POI와 열차가 없는 POI도 그대로 옮긴다', () => {

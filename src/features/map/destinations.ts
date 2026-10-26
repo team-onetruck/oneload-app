@@ -19,6 +19,8 @@ export interface DestinationView {
   verified: boolean
   // 표 사는 곳이면 도착 화면에서 표 사는 법을 이어서 묻게 한다
   tickets: boolean
+  // 공항철도 승강장이면 도착 화면에서 전광판을 확인하게 한다. 열차별 타는 곳은 데이터에 없다
+  platform: boolean
 }
 
 // 서버 category(backend 지도 데이터의 POI category) → 화면 이름. 모르는 값은 id를 그대로 보여 준다
@@ -39,5 +41,6 @@ export function destinationViews(out: PoisOut): DestinationView[] {
     train: p.train_type ?? null,
     verified: p.verified,
     tickets: p.category === 'tickets',
+    platform: p.category === 'platform',
   }))
 }

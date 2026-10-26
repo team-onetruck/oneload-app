@@ -635,6 +635,8 @@ function useAppState() {
   const destinationList: DestinationView[] | null = pois ? destinationViews(pois) : null
   // 표 사는 곳(category tickets)에 도착했으면 표 사는 법을 이어서 묻게 한다. 서버 POI 목록에서 찾는다
   const atTickets = destinationList?.find((d) => d.poiId === dest)?.tickets ?? false
+  // 승강장에 도착했으면 열차별 타는 곳은 전광판에서 확인하게 한다
+  const atPlatform = destinationList?.find((d) => d.poiId === dest)?.platform ?? false
 
   // 후보·직접 선택 화면이 보는 목록. 서버 후보와 지도 그래프(받는 중이면 null)
   const candidateList: CandidateView[] = located?.kind === 'candidates' ? candidateViews(located.candidates, graph) : []
@@ -645,7 +647,7 @@ function useAppState() {
 
   return {
     lang, changeLang, langPending, menuOpen, setMenuOpen, screen, setScreen, session, sessionInfo, applySession, starting, startSession, routeActive,
-    train, dest, here, guide, routing, routeError, arrivedPlace, atTickets, stepIdx, messages, photo,
+    train, dest, here, guide, routing, routeError, arrivedPlace, atTickets, atPlatform, stepIdx, messages, photo,
     graph, ensureGraph, destinationList, candidateList, retakeHint, manualList, manualReason, confirming,
     sendText, sendChip, sendSuggested, pickDestination, startRoute, analyzePhoto, confirmLocation, nextStep, boughtTicket, reportLost, reset,
   }

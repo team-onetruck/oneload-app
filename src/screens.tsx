@@ -876,7 +876,7 @@ export function RouteScreen() {
 export function Arrived() {
   const app = useApp()
   // 도착한 장소. http 모드는 서버 node_id와 지도 그래프 이름, mock 모드는 data.ts 노드
-  const { lang, arrivedPlace: place, atTickets } = app
+  const { lang, arrivedPlace: place, atTickets, atPlatform } = app
   const [rating, setRating] = useState(0)
   if (!place) return null
   const askHowToBuy = () => {
@@ -895,6 +895,7 @@ export function Arrived() {
       <p className="arrived-place">
         {placeName(place, lang)} {place.floor && <FloorBadge floor={place.floor} />}
       </p>
+      {atPlatform && <p className="muted center pad">{UI.platformBoard[lang]}</p>}
       {atTickets ? (
         <div className="stack pad">
           {/* 서버는 표를 샀다는 말을 들어야 승강장으로 안내한다. '승강장으로 가기'만 보내면 다시 표 사는 곳으로 보낸다 */}
