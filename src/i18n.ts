@@ -24,6 +24,17 @@ export const UI = {
   unverified: { en: 'Not verified', ko: '확인되지 않음' },
   findMe: { en: 'Find where I am', ko: '현재 위치 찾기' },
   startRoute: { en: 'Start directions', ko: '길안내 시작' },
+  // 표 사는 곳에서 표를 산 뒤. 서버에 표를 샀다고 알려야 승강장으로 안내한다
+  boughtTicket: { en: 'I have my ticket · To the platform', ko: '표를 샀어요 · 승강장으로' },
+  howToBuy: { en: 'How do I buy a ticket?', ko: '승차권은 어떻게 사요?' },
+  // 서버가 지금 서 있는 곳을 목적지로 다시 정했을 때 말풍선에 붙인다
+  hereTickets: { en: 'You’re already at the ticket counter.', ko: '지금 계신 곳이 표 사는 곳이에요.' },
+  herePlace: { en: 'You’re already here.', ko: '지금 계신 곳이 목적지예요.' },
+  // 승강장 도착 화면. 열차별 타는 곳은 데이터에 없어서 단정하지 않고 역 전광판에 맡긴다
+  platformBoard: {
+    en: 'Each train may leave from a different track. Check the departure board for the next train’s time and track.',
+    ko: '열차마다 타는 곳이 다를 수 있어요. 전광판에서 다음 열차의 출발 시각과 타는 곳을 확인하세요.',
+  },
   retry: { en: 'Try again', ko: '다시 시도' },
   pickDest: { en: 'Choose from list', ko: '목록에서 선택' },
 

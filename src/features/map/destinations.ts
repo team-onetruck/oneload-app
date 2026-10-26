@@ -9,6 +9,8 @@ import type { Text, TrainType } from '../../data'
 export interface DestinationView {
   // 고르면 이 값을 그대로 selected_poi_id로 보낸다 (http: 서버 poi_id)
   poiId: string
+  // 이 장소가 붙은 지도 노드 (서버 nearest_node_id). 지금 서 있는 곳과 같은지 볼 때 쓴다
+  nodeId: string
   name: Text
   floor: string
   category: Text
@@ -17,6 +19,8 @@ export interface DestinationView {
   verified: boolean
   // 표 사는 곳이면 도착 화면에서 표 사는 법을 이어서 묻게 한다
   tickets: boolean
+  // 공항철도 승강장이면 도착 화면에서 전광판을 확인하게 한다. 열차별 타는 곳은 데이터에 없다
+  platform: boolean
 }
 
 // 서버 category(backend 지도 데이터의 POI category) → 화면 이름. 모르는 값은 id를 그대로 보여 준다
@@ -30,11 +34,13 @@ export const categoryText = (category: string): Text => CATEGORY_TEXT[category] 
 export function destinationViews(out: PoisOut): DestinationView[] {
   return out.pois.map((p) => ({
     poiId: p.poi_id,
+    nodeId: p.nearest_node_id,
     name: { en: p.name_en, ko: p.name_ko },
     floor: p.floor_id,
     category: categoryText(p.category),
     train: p.train_type ?? null,
     verified: p.verified,
     tickets: p.category === 'tickets',
+    platform: p.category === 'platform',
   }))
 }

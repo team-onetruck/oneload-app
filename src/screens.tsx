@@ -253,7 +253,8 @@ function fromView(v: ChatView, lang: Lang, app: ReturnType<typeof useApp>): Bubb
     body: v.body,
     items: v.items,
     tip: v.tip,
-    note: null,
+    // 서버가 지금 서 있는 곳을 목적지로 다시 정했다. 서버 문장은 그대로 두고 지금 위치를 덧붙인다
+    note: v.standingAt ? (v.standingAt === 'tickets' ? UI.hereTickets : UI.herePlace)[lang] : null,
     unverified: v.unverified,
     refused: v.refused,
     sources: v.sources,
@@ -292,6 +293,7 @@ const ACTION_ICON: Record<ChatAction, ReactNode> = {
   retake: <Camera size={19} />,
   pickLocation: <List size={18} />,
   startRoute: <Navigation size={19} />,
+  boughtTicket: <Navigation size={19} />,
   retry: <RefreshCw size={18} />,
   pickDest: <List size={18} />,
   restart: <RotateCcw size={18} />,
@@ -301,11 +303,12 @@ const ACTION_LABEL: Record<ChatAction, Text> = {
   retake: UI.retake,
   pickLocation: UI.pickOnList,
   startRoute: UI.startRoute,
+  boughtTicket: UI.boughtTicket,
   retry: UI.retry,
   pickDest: UI.pickDest,
   restart: UI.newTrip,
 }
-const PRIMARY_ACTIONS = new Set<ChatAction>(['findMe', 'retake', 'startRoute'])
+const PRIMARY_ACTIONS = new Set<ChatAction>(['findMe', 'retake', 'startRoute', 'boughtTicket'])
 
 function AssistantMsg({ m, latest }: { m: Msg; latest: boolean }) {
   const app = useApp()
@@ -329,6 +332,7 @@ function AssistantMsg({ m, latest }: { m: Msg; latest: boolean }) {
     if (a === 'findMe' || a === 'retake') app.setScreen('locate')
     if (a === 'pickLocation') app.setScreen('manual')
     if (a === 'startRoute') app.startRoute()
+    if (a === 'boughtTicket') app.boughtTicket()
     if (a === 'pickDest') app.setScreen('destinations')
     if (a === 'restart') app.reset()
   }
@@ -872,12 +876,12 @@ export function RouteScreen() {
 export function Arrived() {
   const app = useApp()
   // 도착한 장소. http 모드는 서버 node_id와 지도 그래프 이름, mock 모드는 data.ts 노드
-  const { lang, arrivedPlace: place, atTickets } = app
+  const { lang, arrivedPlace: place, atTickets, atPlatform } = app
   const [rating, setRating] = useState(0)
   if (!place) return null
-  const goChat = (intent: 'buy' | 'platform') => {
+  const askHowToBuy = () => {
     app.setScreen('chat')
-    app.sendChip(intent === 'buy' ? { en: 'How do I buy a ticket?', ko: '승차권은 어떻게 사요?' } : { en: 'Go to the platform', ko: '승강장으로 가기' })
+    app.sendChip(UI.howToBuy)
   }
   return (
     <main className="screen arrived">
@@ -891,13 +895,15 @@ export function Arrived() {
       <p className="arrived-place">
         {placeName(place, lang)} {place.floor && <FloorBadge floor={place.floor} />}
       </p>
+      {atPlatform && <p className="muted center pad">{UI.platformBoard[lang]}</p>}
       {atTickets ? (
         <div className="stack pad">
-          <button className="btn primary block" onClick={() => goChat('buy')}>
-            <Ticket size={19} /> {lang === 'en' ? 'How do I buy a ticket?' : '승차권은 어떻게 사요?'}
+          {/* 서버는 표를 샀다는 말을 들어야 승강장으로 안내한다. '승강장으로 가기'만 보내면 다시 표 사는 곳으로 보낸다 */}
+          <button className="btn primary block" onClick={app.boughtTicket}>
+            <Navigation size={18} /> {UI.boughtTicket[lang]}
           </button>
-          <button className="btn secondary block" onClick={() => goChat('platform')}>
-            <Navigation size={18} /> {lang === 'en' ? 'Go to the platform' : '승강장으로 가기'}
+          <button className="btn secondary block" onClick={askHowToBuy}>
+            <Ticket size={19} /> {UI.howToBuy[lang]}
           </button>
         </div>
       ) : (
