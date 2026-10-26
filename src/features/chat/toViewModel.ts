@@ -11,7 +11,8 @@ import type { NoticeReason, RecoveryAction, RelocateReason } from '../recovery/r
 export type ReplyStatus = MessageOut['status']
 
 // 말풍선 아래 버튼. findMe·retake·pickLocation·startRoute는 next_action에서, retry·pickDest·restart는 탈출구 규칙에서 온다.
-export type ChatAction = 'findMe' | 'retake' | 'pickLocation' | 'startRoute' | 'retry' | 'pickDest' | 'restart'
+// boughtTicket은 표 사는 곳에 서 있을 때 startRoute 대신 붙는다 (features/chat/replyEffects.ts standingView)
+export type ChatAction = 'findMe' | 'retake' | 'pickLocation' | 'startRoute' | 'boughtTicket' | 'retry' | 'pickDest' | 'restart'
 
 export interface ChatSource {
   id: string
@@ -41,7 +42,12 @@ export interface ReplyView {
   chips: ChatChip[]
   actions: ChatAction[]
   destinationPoiId: string | null
+  // 서버 목적지가 지금 서 있는 곳이면 그 종류. 말풍선에 "지금 계신 곳이 …예요"를 붙인다 (store가 정한다)
+  standingAt: StandingAt | null
 }
+
+// tickets: 표 사는 곳, place: 그 밖의 장소
+export type StandingAt = 'tickets' | 'place'
 
 // 오류 말풍선의 문구 종류. recoveryFor 결과를 그대로 따른다 (session: 세션 종료, resync: 409 INVALID_STATE)
 export type ErrorReason = NoticeReason | RelocateReason | 'session' | 'resync'
@@ -87,6 +93,7 @@ export function toViewModel(res: MessageOut): ReplyView {
     chips: (res.suggested_replies ?? []).map((r) => ({ label: r.label, selectedPoiId: r.selected_poi_id || null })),
     actions,
     destinationPoiId: res.destination?.poi_id ?? null,
+    standingAt: null,
   }
 }
 

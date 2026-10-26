@@ -9,6 +9,8 @@ import type { Text, TrainType } from '../../data'
 export interface DestinationView {
   // 고르면 이 값을 그대로 selected_poi_id로 보낸다 (http: 서버 poi_id)
   poiId: string
+  // 이 장소가 붙은 지도 노드 (서버 nearest_node_id). 지금 서 있는 곳과 같은지 볼 때 쓴다
+  nodeId: string
   name: Text
   floor: string
   category: Text
@@ -30,6 +32,7 @@ export const categoryText = (category: string): Text => CATEGORY_TEXT[category] 
 export function destinationViews(out: PoisOut): DestinationView[] {
   return out.pois.map((p) => ({
     poiId: p.poi_id,
+    nodeId: p.nearest_node_id,
     name: { en: p.name_en, ko: p.name_ko },
     floor: p.floor_id,
     category: categoryText(p.category),

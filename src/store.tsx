@@ -8,7 +8,8 @@ import {
 import type { GraphOut, NavigationStateOut, PoisOut, SessionStatus } from './api'
 import type { Reply } from './assistant'
 import type { Lang, Text, TrainType } from './data'
-import { messageBody, replyEffects, resyncPlan } from './features/chat/replyEffects'
+import { messageBody, replyEffects, resyncPlan, standingAt, standingView } from './features/chat/replyEffects'
+import type { Whereabouts } from './features/chat/replyEffects'
 import { sendChat } from './features/chat/sendChat'
 import { toErrorView } from './features/chat/toViewModel'
 import type { ChatChip, ChatView, ErrorView } from './features/chat/toViewModel'
@@ -152,10 +153,16 @@ function useAppState() {
   const sessionId = sessionInfo?.id ?? null
   const hasRoute = activeRoute !== null
   const revision = session?.revision ?? 0
-  const live = useRef({ train, dest, here, lang, sessionId, sessionInfo, hasRoute, revision, located, confirming, activeRoute, stepIdx })
+  const live = useRef({ train, dest, here, lang, sessionId, sessionInfo, hasRoute, revision, located, confirming, activeRoute, stepIdx, pois })
   useLayoutEffect(() => {
-    live.current = { train, dest, here, lang, sessionId, sessionInfo, hasRoute, revision, located, confirming, activeRoute, stepIdx }
+    live.current = { train, dest, here, lang, sessionId, sessionInfo, hasRoute, revision, located, confirming, activeRoute, stepIdx, pois }
   })
+
+  // 서버 목적지가 지금 서 있는 곳인지 볼 때 쓰는 최신 값
+  const whereabouts = (): Whereabouts => {
+    const { here: node, pois: list, activeRoute: route } = live.current
+    return { here: node, destinations: list ? destinationViews(list) : null, route }
+  }
 
   // 응답의 session을 그대로 반영한다. 늦게 도착한 옛 응답이 더 새 값을 덮지 않도록 revision이 작으면 버린다.
   const applySession = (next: SessionStatus) => setSession((cur) => (cur && next.revision < cur.revision ? cur : next))
@@ -259,6 +266,8 @@ function useAppState() {
         onReply: (res) => {
           if (!current()) return
           const e = replyEffects(res)
+          // 지금 서 있는 곳을 다시 목적지로 받으면 길안내를 권하지 않는다. 옛 경로를 지우기 전에 비교한다
+          const at = e.destination ? standingAt(e.destination, whereabouts()) : null
           applySession(e.session)
           setTrain(e.train)
           if (e.destination) {
@@ -270,7 +279,7 @@ function useAppState() {
             setStepIdx(0)
           }
           if (e.clearLocation) setHere(null)
-          setBubble({ view: e.view })
+          setBubble({ view: at ? standingView(e.view, at) : e.view })
         },
         // 버튼은 오류 알림 시트에 있다. INVALID_STATE만 onResync에서 말풍선 버튼을 채운다
         onError: (view) => setBubble({ view: { ...view, actions: [] } }),
@@ -320,7 +329,7 @@ function useAppState() {
   }
 
   // 목적지 목록을 처음 필요할 때 한 번 받는다. 목록 화면에서 실패하면 오류 알림에서 다시 시도하고,
-  // 도착 화면(표 사는 곳인지 판단)에서는 알리지 않는다. 그때는 표 사는 법 버튼 대신 평가 화면이 보인다
+  // 경로·도착 화면(표 사는 곳인지 판단)에서는 알리지 않는다. 그때는 표 사는 법 버튼 대신 평가 화면이 보인다
   const ensurePois = (report = true) => {
     const { sessionId: sid, sessionInfo: info } = live.current
     if (!sid || !info) return
@@ -343,7 +352,8 @@ function useAppState() {
   useEffect(() => {
     if (screen === 'locate' || screen === 'candidates' || screen === 'manual') loaders.current.ensureGraph()
     if (screen === 'destinations') loaders.current.ensurePois()
-    if (screen === 'arrived') loaders.current.ensurePois(false)
+    // 도착 화면이 평가 화면으로 잠깐 보였다가 바뀌지 않게 경로 화면에서 미리 받는다
+    if (screen === 'route' || screen === 'arrived') loaders.current.ensurePois(false)
   }, [screen])
 
   // 409 INVALID_STATE 뒤: 다시 읽은 서버 상태로 맞는 화면에 간다. 채팅으로 가면 채팅과 같은 오류 말풍선과 버튼을 남긴다
@@ -359,6 +369,14 @@ function useAppState() {
   const report = (type: NavigationEventType, routeId: string, options?: { now?: boolean }) => {
     if (!live.current.sessionId) return
     outbox.current.push(routeId, createNavigationEvent(type), options)
+  }
+
+  // 마지막 단계를 넘겼다. 서버에 arrived를 알린다. 서버도 도착하면 목적지 노드를 새 현재 위치로 둔다 (backend/app/api/sessions.py)
+  const arrive = (route: ActiveRoute) => {
+    setStepIdx(route.steps.length)
+    setHere(route.stops[route.stops.length - 1].nodeId)
+    report('arrived', route.routeId)
+    setScreen('arrived')
   }
 
   // 확정된 위치에서 서버 경로를 받는다. reroute면 같은 목적지로 다시 계산한다(서버는 route_id를 유지하고 route_revision만 올린다)
@@ -399,10 +417,13 @@ function useAppState() {
           if (!current()) return
           applySession(out.session)
           rerouting.current = false
-          setActiveRoute(toActiveRoute(out, g))
+          const route = toActiveRoute(out, g)
+          setActiveRoute(route)
           setStepIdx(0)
           // 서버는 시작 이벤트를 ready_to_navigate에서만 받는다. 안내 중에 다시 계산한 경우는 이미 navigating이다
           if (out.session.state === 'ready_to_navigate') report('navigation_started', out.route_id)
+          // 목적지에서 위치를 확정하면 경로는 출발점 하나, 단계 0개다. 버튼 없는 경로 화면 대신 바로 도착으로 넘긴다
+          if (route.steps.length === 0) arrive(route)
         },
         onInvalidState: (state, error) => {
           setRouting(false)
@@ -541,16 +562,19 @@ function useAppState() {
     setScreen('chat')
   }
 
-  // '다음'은 화면의 단계만 넘긴다. 마지막 단계를 넘기면 도착이고 서버에 arrived를 알린다
+  // '다음'은 화면의 단계만 넘긴다. 마지막 단계를 넘기면 도착이다
   const nextStep = () => {
     const route = live.current.activeRoute
     if (!route) return
     if (stepIdx + 1 < route.steps.length) return setStepIdx(stepIdx + 1)
-    setStepIdx(route.steps.length)
-    // 서버도 도착하면 목적지 노드를 새 현재 위치로 둔다 (backend/app/api/sessions.py)
-    setHere(route.stops[route.stops.length - 1].nodeId)
-    report('arrived', route.routeId)
-    setScreen('arrived')
+    arrive(route)
+  }
+
+  // 표 사는 곳에서 표를 샀을 때. 서버는 표를 샀는지(has_ticket) 기억해서, 샀다고 알려야 표 사는 곳 대신 승강장으로 안내한다
+  const boughtTicket = () => {
+    const text: Text = { en: 'I’ve bought it. Take me to the platform.', ko: '표를 샀어요. 승강장으로 가요' }
+    setScreen('chat')
+    say({ display: text, message: text[live.current.lang] })
   }
 
   const reportLost = () => {
@@ -623,7 +647,7 @@ function useAppState() {
     lang, changeLang, langPending, menuOpen, setMenuOpen, screen, setScreen, session, sessionInfo, applySession, starting, startSession, routeActive,
     train, dest, here, guide, routing, routeError, arrivedPlace, atTickets, stepIdx, messages, photo,
     graph, ensureGraph, destinationList, candidateList, retakeHint, manualList, manualReason, confirming,
-    sendText, sendChip, sendSuggested, pickDestination, startRoute, analyzePhoto, confirmLocation, nextStep, reportLost, reset,
+    sendText, sendChip, sendSuggested, pickDestination, startRoute, analyzePhoto, confirmLocation, nextStep, boughtTicket, reportLost, reset,
   }
 }
 

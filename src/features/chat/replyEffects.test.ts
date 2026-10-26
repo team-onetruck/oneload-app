@@ -5,7 +5,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { MessageOut } from '../../api'
-import { messageBody, replyEffects, resyncPlan } from './replyEffects'
+import { messageBody, replyEffects, resyncPlan, standingAt, standingView } from './replyEffects'
+import type { Whereabouts } from './replyEffects'
+import { toViewModel } from './toViewModel'
 
 const base: MessageOut = {
   status: 'answered',
@@ -84,5 +86,69 @@ describe('resyncPlan (409 INVALID_STATE 뒤 navigation-state의 next_action)', (
   it('continue_navigation은 화면에 경로가 있을 때만 경로 화면으로 돌아간다', () => {
     expect(resyncPlan('continue_navigation', true).screen).toBe('route')
     expect(resyncPlan('continue_navigation', false).screen).toBe('chat')
+  })
+})
+
+describe('standingAt (서버 목적지가 지금 서 있는 곳인지)', () => {
+  const destinations = [
+    { poiId: 'poi-express-tickets', nodeId: 'express-tickets', tickets: true },
+    { poiId: 'poi-express-platform', nodeId: 'express-platform', tickets: false },
+  ]
+  // 4호선 개찰구에서 표 사는 곳까지 간 경로. 도착한 뒤에도 다음 목적지가 정해질 때까지 남아 있다
+  const route = {
+    destinationPoiId: 'poi-express-tickets',
+    stops: [
+      { nodeId: 'line4-gates', floorId: 'B1' },
+      { nodeId: 'express-tickets', floorId: 'B2' },
+    ],
+  }
+  const at = (where: Partial<Whereabouts>) => ({ here: 'express-tickets', destinations, route, ...where })
+
+  it('표 사는 곳에 서 있는데 같은 표 사는 곳을 다시 받으면 tickets다', () => {
+    expect(standingAt('poi-express-tickets', at({}))).toBe('tickets')
+  })
+
+  it('표 사는 곳이 아닌 장소에 서 있으면 place다', () => {
+    expect(standingAt('poi-express-platform', at({ here: 'express-platform' }))).toBe('place')
+  })
+
+  it('다른 곳이 목적지이거나 위치가 없으면 null이다', () => {
+    expect(standingAt('poi-express-platform', at({}))).toBeNull()
+    expect(standingAt('poi-express-tickets', at({ here: 'line4-gates' }))).toBeNull()
+    expect(standingAt('poi-express-tickets', at({ here: null }))).toBeNull()
+  })
+
+  it('목적지 목록이 없으면 방금 도착한 경로의 끝 노드로 본다', () => {
+    expect(standingAt('poi-express-tickets', at({ destinations: null }))).toBe('place')
+    expect(standingAt('poi-express-platform', at({ destinations: null }))).toBeNull()
+    expect(standingAt('poi-express-tickets', at({ destinations: null, route: null }))).toBeNull()
+  })
+})
+
+describe('standingView', () => {
+  // 운영 서버가 표 사는 곳에서 "승차권은 어떻게 사요?"에 준 답의 모양 (2026-10-26)
+  const again = toViewModel({
+    ...base,
+    status: 'destination_set',
+    intent: 'ticket_purchase_and_navigation',
+    assistant_message: '…직통열차 표 사는 곳(으)로 안내할게요. B2에 있어요. 위치가 확인돼 있어 바로 출발할 수 있어요.',
+    destination: { poi_id: 'poi-express-tickets' },
+    next_action: 'navigate',
+    session: { state: 'ready_to_navigate', revision: 8 },
+  })
+
+  it('표 사는 곳이면 길안내 버튼 대신 표를 샀다고 알리는 버튼을 두고, 서버 문장은 그대로 둔다', () => {
+    expect(again.actions).toEqual(['startRoute'])
+    const v = standingView(again, 'tickets')
+    expect(v.actions).toEqual(['boughtTicket'])
+    expect(v.standingAt).toBe('tickets')
+    expect(v.body).toBe(again.body)
+    expect(v.destinationPoiId).toBe('poi-express-tickets')
+  })
+
+  it('다른 장소면 길안내 버튼만 빼고 나머지 버튼은 남긴다', () => {
+    const v = standingView({ ...again, actions: ['startRoute', 'pickDest'] }, 'place')
+    expect(v.actions).toEqual(['pickDest'])
+    expect(v.standingAt).toBe('place')
   })
 })
