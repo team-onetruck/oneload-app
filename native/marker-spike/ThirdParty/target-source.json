@@ -1,0 +1,12 @@
+{
+  "source": "https://github.com/google-ar/arcore-android-sdk/blob/main/samples/augmented_image_java/app/src/main/assets/default.jpg",
+  "downloaded_on": "2026-10-25",
+  "sha256": "ab79c5ac504594388a796058b9fc792088a4c235a83a4a294c73a6ac831c8b44",
+  "license_file": "ARCore-SDK-LICENSE.txt",
+  "license_scope": "Section 2: ARCore SDK source files; sample image copied without modification",
+  "pixel_size": [899, 900],
+  "print_width_m": 0.18,
+  "arcoreimg_version": "Unity ARCore XR Plugin 6.3.5 bundled Windows tool",
+  "arcoreimg_score": 100,
+  "field_accuracy": "unverified"
+}

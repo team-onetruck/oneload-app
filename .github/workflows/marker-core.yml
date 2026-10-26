@@ -1,0 +1,16 @@
+name: Marker core
+on:
+  push:
+    paths: ['native/marker-spike/**', '.github/workflows/marker-core.yml']
+  pull_request:
+    paths: ['native/marker-spike/**', '.github/workflows/marker-core.yml']
+jobs:
+  marker-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+      - run: dotnet run --project native/marker-spike/CoreChecks/MarkerCoreChecks.csproj
+      - run: node native/marker-spike/tools/check-project.mjs

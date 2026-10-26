@@ -1,0 +1,9 @@
+fileFormatVersion: 2
+guid: e83b1b7a8f31504b8129366f09cde601
+TrueTypeFontImporter:
+  externalObjects: {}
+  serializedVersion: 4
+  fontSize: 18
+  includeFontData: 1
+  fontNames:
+  - Hangil UI
