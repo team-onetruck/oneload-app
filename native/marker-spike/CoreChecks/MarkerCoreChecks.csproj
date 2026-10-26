@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../Assets/Hangil/Core/MarkerMath.cs" />
+    <Compile Include="../Assets/Hangil/Core/ExperimentGuide.cs" />
     <Compile Include="Program.cs" />
   </ItemGroup>
 </Project>
