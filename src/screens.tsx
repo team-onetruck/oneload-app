@@ -10,6 +10,7 @@ import { TRAIN_NAME } from './data'
 import type { Lang, Text } from './data'
 import type { ChatAction, ChatSource, ChatView, ErrorReason } from './features/chat/toViewModel'
 import type { PlaceView } from './features/localization/views'
+import { destinationDetail } from './features/map/destinations'
 import { remainingDistanceM } from './features/route/toSteps'
 import { useRecovery } from './features/recovery/context'
 import type { NoticeReason, Recovery, RecoveryAction, RelocateReason, SessionEndCause } from './features/recovery/recovery'
@@ -643,8 +644,7 @@ export function Destinations() {
                 <span className="row-name">
                   {d.name[lang]}
                   <small>
-                    {d.category[lang]}
-                    {d.train && ` · ${TRAIN_NAME[d.train][lang]}`}
+                    {destinationDetail(d, lang)}
                     {!d.verified && <span className="row-unverified"> · {UI.unverified[lang]}</span>}
                   </small>
                 </span>

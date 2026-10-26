@@ -93,7 +93,7 @@ export interface Poi {
   id: PoiId
   node: NodeId
   train: TrainType
-  // 서버 POI의 category와 같은 값 (tickets, platform). 화면 이름은 features/map/destinations.ts의 categoryText
+  // 서버 POI의 category와 같은 값 (tickets, platform 등). 화면 이름은 features/map/destinations.ts의 categoryText
   category: string
 }
 

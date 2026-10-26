@@ -12,7 +12,7 @@ import { mockBackend } from '../../test/handlers'
 import { messageBody, replyEffects } from '../chat/replyEffects'
 import { sendChat } from '../chat/sendChat'
 import type { ChatHooks } from '../chat/sendChat'
-import { categoryText, destinationViews } from './destinations'
+import { categoryText, destinationDetail, destinationViews } from './destinations'
 import { createMapCache } from './graphCache'
 
 describe('destinationViews', () => {
@@ -42,12 +42,36 @@ describe('destinationViews', () => {
       map_version: MAP_VERSION,
       pois: [{ ...POIS[0], poi_id: 'poi-lockers', category: 'lockers', train_type: null, verified: false }],
     }
-    expect(destinationViews(out)[0]).toMatchObject({ poiId: 'poi-lockers', train: null, verified: false, tickets: false, category: { en: 'lockers', ko: 'lockers' } })
+    expect(destinationViews(out)[0]).toMatchObject({ poiId: 'poi-lockers', train: null, verified: false, tickets: false, category: null })
   })
 
-  it('모르는 category는 id를 그대로 보여 준다', () => {
-    expect(categoryText('platform')).toEqual({ en: 'Platform', ko: '승강장' })
-    expect(categoryText('exit')).toEqual({ en: 'exit', ko: 'exit' })
+  it('운영 지도(2026-10-25.2)의 category 11종에 한국어·영어 이름이 있다', () => {
+    const live = ['tickets', 'platform', 'metro_tickets', 'metro_platform', 'card_refund', 'help', 'service', 'transfer', 'train', 'toilet', 'exit']
+    for (const category of live) {
+      const text = categoryText(category)
+      expect(text, category).not.toBeNull()
+      // 화면에 분류 id가 그대로 나가지 않는다
+      expect(text?.ko, category).not.toBe(category)
+      expect(text?.en, category).not.toMatch(/_/)
+    }
+    expect(categoryText('card_refund')).toEqual({ en: 'Card refund', ko: '교통카드 환급' })
+    expect(categoryText('exit')).toEqual({ en: 'Exit', ko: '출구' })
+  })
+
+  it('모르는 category는 id를 보이지 않고 null로 둔다', () => {
+    expect(categoryText('lockers')).toBeNull()
+  })
+})
+
+describe('destinationDetail', () => {
+  it('분류와 열차를 구분점으로 잇는다', () => {
+    expect(destinationDetail({ category: { en: 'Tickets', ko: '승차권' }, train: 'express' }, 'ko')).toBe('승차권 · 직통열차')
+  })
+
+  it('열차가 없으면 분류만, 분류를 모르면 열차만 쓰고 남는 구분점이 없다', () => {
+    expect(destinationDetail({ category: { en: 'Transfer', ko: '갈아타는 곳' }, train: null }, 'en')).toBe('Transfer')
+    expect(destinationDetail({ category: null, train: 'allstop' }, 'ko')).toBe('일반열차')
+    expect(destinationDetail({ category: null, train: null }, 'ko')).toBe('')
   })
 })
 
