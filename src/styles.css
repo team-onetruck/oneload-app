@@ -1085,11 +1085,6 @@ button {
   align-items: center;
   margin: 0 -8px 4px -11px;
 }
-.route-to {
-  font-size: 14px;
-  font-weight: 600;
-  color: #d8edf8;
-}
 .route-dest {
   font-size: 30px;
   line-height: 1.12;

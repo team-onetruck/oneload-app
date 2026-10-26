@@ -686,7 +686,6 @@ function RouteWaiting() {
             <MessageCircle size={22} />
           </button>
         </div>
-        <p className="route-to">{UI.to[lang]}</p>
       </header>
       <p className="pad muted" role="status">
         {routing ? UI.routeLoading[lang] : noRoute ? UI.noRoute[lang] : null}
@@ -749,7 +748,6 @@ export function RouteScreen() {
             <MessageCircle size={22} />
           </button>
         </div>
-        <p className="route-to">{UI.to[lang]}</p>
         <h1 className="route-dest">{placeName(guide.destination, lang)}</h1>
         <div className="route-meta">
           {train && <span className="train-chip">AREX {TRAIN_NAME[train][lang]}</span>}
