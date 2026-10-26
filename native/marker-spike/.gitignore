@@ -14,3 +14,7 @@
 /CoreChecks/bin/
 /Assets/Hangil/Generated/
 /Assets/Hangil/Generated.meta
+# 개인별 XR 시뮬레이션 설정과 Android 네이티브 빌드 임시 폴더
+/Assets/XR/UserSimulationSettings/
+/Assets/XR/UserSimulationSettings.meta
+/.utmp/
