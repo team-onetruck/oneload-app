@@ -690,7 +690,6 @@ function RouteWaiting() {
             <MessageCircle size={22} />
           </button>
         </div>
-        <p className="route-to">{UI.to[lang]}</p>
       </header>
       <p className="pad muted" role="status">
         {routing ? UI.routeLoading[lang] : noRoute ? UI.noRoute[lang] : null}
@@ -741,6 +740,8 @@ export function RouteScreen() {
   const mins = Math.max(1, Math.ceil(meters / WALK_M_PER_MIN))
   const lastLeg = stepIdx >= legs.length - 1
   const leg = legs[stepIdx]
+  // 거리뷰·카메라 안내의 가로 노선에서 지금 위치까지 온 비율. 채움 길이와 지금 위치 링을 이 값으로 옮긴다
+  const along = `calc((100% - var(--slot)) * ${stops.length > 1 ? stepIdx / (stops.length - 1) : 0})`
 
   return (
     <main className={`screen route ${view !== 'line' ? 'street-mode' : ''}`}>
@@ -751,7 +752,6 @@ export function RouteScreen() {
             <MessageCircle size={22} />
           </button>
         </div>
-        <p className="route-to">{UI.to[lang]}</p>
         <h1 className="route-dest">{placeName(guide.destination, lang)}</h1>
         <div className="route-meta">
           {train && <span className="train-chip">AREX {TRAIN_NAME[train][lang]}</span>}
@@ -796,11 +796,16 @@ export function RouteScreen() {
           )}
           {leg && (
             <div className="sv-step">
-              <ol className="sv-progress" aria-label={`${stepIdx + 1} / ${legs.length}`}>
-                {legs.map((l, i) => (
-                  <li key={l.stepId} className={i < stepIdx ? 'done' : i === stepIdx ? 'current' : ''} />
-                ))}
-              </ol>
+              {/* 노선 보기와 같은 트랙·정거장 원·지금 위치 링을 가로 한 줄로 그린다 */}
+              <div className="stop-line">
+                <span className="stop-line-fill" style={{ width: along }} aria-hidden />
+                <ol aria-label={`${stepIdx + 1} / ${legs.length}`}>
+                  {stops.map((stop, i) => (
+                    <li key={`${stop.nodeId}-${i}`} className={i < stepIdx ? 'done' : i === stepIdx ? 'current' : ''} />
+                  ))}
+                </ol>
+                <span className="stop-line-here" style={{ left: along }} aria-hidden />
+              </div>
               <div className="sv-step-row">
                 <span className="leg-icon">{kindIcon(leg.kind)}</span>
                 <p>

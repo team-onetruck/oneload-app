@@ -62,7 +62,6 @@ export const UI = {
   loadingPlaces: { en: 'Loading places…', ko: '장소 목록을 불러오는 중…' },
   destTitle: { en: 'Where do you want to go?', ko: '어디로 갈까요?' },
 
-  to: { en: 'To', ko: '목적지' },
   from: { en: 'From', ko: '출발' },
   next: { en: 'Next', ko: '다음' },
   arrivedBtn: { en: 'I’m here', ko: '도착했어요' },
