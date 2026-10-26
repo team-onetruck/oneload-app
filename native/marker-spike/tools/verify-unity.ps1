@@ -4,7 +4,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSScriptRoot
-if (-not (Test-Path -LiteralPath $EditorPath -PathType Leaf)) { throw 'Unity.exe 경로가 올바르지 않습니다.' }
+if (-not (Test-Path -LiteralPath $EditorPath -PathType Leaf)) { throw 'Unity 실행 파일 경로가 올바르지 않습니다. (Windows: Editor/Unity.exe, macOS: Unity.app/Contents/MacOS/Unity)' }
 $logs = Join-Path $project 'Logs'
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 $method = if ($BuildAndroid) { 'Hangil.MarkerSpike.Editor.MarkerSpikeBuilder.BuildAndroid' } else { 'Hangil.MarkerSpike.Editor.MarkerSpikeBuilder.CreateScene' }

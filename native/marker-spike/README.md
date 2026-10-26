@@ -2,7 +2,7 @@
 
 2026-10-25 UX·최적화 개선: [목적·변경 내용·검증 결과와 설치 후 측정 순서](improvements-20261025.md).
 
-사용자가 Unity + AR Foundation을 선택한 뒤 준비한 독립 **측정용 소스 프로젝트**다. 기존 React 웹을 교체하지 않으며 백엔드·Agent를 호출하지 않는다. Unity Editor가 현재 PC에 없어 **Unity C# 컴파일, 장면 생성, APK 빌드와 실제 S24+ 실행은 아직 수행하지 않았다.** C# 공통 수학·수명 검사는 Unity 없이 실제 컴파일해 실행했다. 이 차이를 구분해야 한다.
+사용자가 Unity + AR Foundation을 선택한 뒤 준비한 독립 **측정용 소스 프로젝트**다. 기존 React 웹을 교체하지 않으며 백엔드·Agent를 호출하지 않는다. 2026-10-26 macOS의 Unity `6000.3.1f1`에서 **Unity C# 컴파일, 장면 생성, APK 빌드를 배치 모드로 통과**했고, 사용자가 Galaxy S24+에서 마커 인식과 화살표 동작을 확인했다. 정합 오차·성능 수치는 아직 측정하지 않았다([기기 검증 기록](field-checklist.md)). C# 공통 수학·수명 검사는 Unity 없이도 실제 컴파일해 실행한다.
 
 ## 사용자가 준비할 것
 
@@ -19,17 +19,17 @@
 ## 기준 버전과 타깃
 
 - Editor 파일은 Unity 공식 AR Foundation Samples의 6.3 브랜치와 같은 `6000.3.1f1`을 기준으로 준비했다. Hub의 다른 6.3 LTS 패치를 사용하면 실제 Editor 버전을 검증 기록에 남긴다.
-- AR Foundation·ARCore XR Plugin·ARKit XR Plugin은 `6.3.5`로 맞췄다. 패키지 버전 존재와 API는 공식 레지스트리·SDK 소스에서 확인했다. Editor를 실행하기 전에는 UPM 의존성 전체 해결이 검증됐다고 하지 않는다.
-- Android: ARM64·IL2CPP·OpenGLES3·최소 API 24·Development Build. 타깃 SDK는 Editor 자동 선택이며 실제 S24+ OS/API는 연결 후 기록한다. 스토어 출시 설정이 아니다.
+- AR Foundation·ARCore XR Plugin·ARKit XR Plugin은 `6.3.5`로 맞췄다. `Packages/packages-lock.json`에 Editor가 해결한 의존성 전체를 고정했다.
+- Android: ARM64·IL2CPP·OpenGLES3·최소 API 25(Unity 6.3의 최소 지원 버전)·Development Build. 타깃 SDK는 Editor 자동 선택이며 실제 S24+ OS/API는 연결 후 기록한다. 스토어 출시 설정이 아니다.
 - 기준 이미지는 Google ARCore SDK의 `default.jpg` 원본이다. 등록한 그림을 찾는 **이미지 추적**이며 QR 해독·AprilTag 검출이 아니다. 전체 출처·라이선스를 `ThirdParty/`에 보존했다.
 - 공식 `arcoreimg eval-img` 결과 **100**. 이미지 특징점 평가일 뿐 실제 인식 성공률·정합 정확도 승인값이 아니다.
 
 ## 처음 여는 순서
 
 1. Unity Hub에서 이 폴더(`Packages`·`Assets`·`ProjectSettings`가 있는 `native/marker-spike`)를 프로젝트로 추가하고 연다. 패키지 설치·스크립트 컴파일이 끝날 때까지 기다린다. 오류가 있으면 먼저 해결하며 APK 성공으로 간주하지 않는다.
-2. 입력 시스템 전환 질문이 나오면 새 Input System 활성화를 허용하고 Editor를 재시작한다. **Player → Other Settings → Active Input Handling**이 Input System Package 또는 Both인지 확인한다.
+2. **Player → Other Settings → Active Input Handling**은 Both로 저장돼 있다. 입력 시스템 전환 질문이 나오면 허용하고 Editor를 재시작한다.
 3. **File → Build Profiles → Android → Switch Platform**을 선택한다.
-4. **Project Settings → XR Plug-in Management → Android → ARCore**를 켠다. Initialize XR on Startup을 켜고, **XR Plug-in Management → Project Validation**의 Android 오류를 해결한다. 이 단계는 아직 자동 실행·검증하지 않았다.
+4. **Project Settings → XR Plug-in Management → Android**의 ARCore와 Initialize XR on Startup은 켜진 상태로 저장돼 있다(`Assets/XR/`). **XR Plug-in Management → Project Validation**에 Android 오류가 없는지 확인한다.
 5. **Hangil → Create Marker Experiment Scene**을 누른다. AR Session·XR Origin·카메라·기준 이미지 라이브러리·앵커 매니저·실험 UI가 생성된다. 생성물은 `Assets/Hangil/Generated/`이며 재생성 가능하다. 수정한 장면이 있으면 먼저 저장한다.
 6. Play Mode는 물리 공간 검증을 대신하지 않는다. USB로 폰을 연결하고 아래 연결 점검을 실행한 뒤 **Hangil → Build Android APK**를 누른다.
 
@@ -73,7 +73,15 @@ node tools/check-project.mjs
 dotnet run --project CoreChecks/MarkerCoreChecks.csproj
 ```
 
-현재 확인: C# 공통 로직 실제 컴파일·실행 **54개 통과**, 타깃·UI 글꼴 SHA256·패키지 버전·문자 집합·Unity GUID 검사, 공식 이미지 특징점 점수 100. `marker-core` CI도 공통 로직만 검사한다. **Unity 런타임/Editor 어셈블리 컴파일, UPM 전체 해결, 생성 장면, APK 설치, 실제 앵커 유지와 정확도는 미검증**이다. 이를 확인하기 전 PR을 실제 AR 실행 완료로 병합하지 않는다.
+현재 확인: C# 공통 로직 실제 컴파일·실행 **54개 통과**, 타깃·UI 글꼴 SHA256·패키지 버전·문자 집합·Unity GUID 검사, 공식 이미지 특징점 점수 100. `marker-core` CI는 공통 로직만 검사한다. Unity 배치 검증(UPM 해결, 런타임/Editor 어셈블리 컴파일, 장면 생성, APK 빌드)은 Unity가 설치된 PC에서 아래처럼 실행한다. 저장소의 설정만으로 동작하며 Editor에서 수동으로 바꿀 것이 없다. **실제 앵커 유지와 정확도는 미측정**이다.
+
+```bash
+# macOS (PowerShell 7: brew install powershell)
+pwsh -NoProfile -File tools/verify-unity.ps1 -EditorPath /Applications/Unity/Hub/Editor/6000.3.1f1/Unity.app/Contents/MacOS/Unity
+pwsh -NoProfile -File tools/verify-unity.ps1 -EditorPath /Applications/Unity/Hub/Editor/6000.3.1f1/Unity.app/Contents/MacOS/Unity -BuildAndroid
+```
+
+Unity 6 Personal 라이선스는 검증하는 그 PC의 Unity Hub에서 로그인하고 활성화해야 한다. 활성화가 안 된 상태면 `No valid Unity Editor license found`(exit 198)로 끝난다.
 
 현장 결과는 `field-checklist.md`에 단말/OS·Editor/패키지 버전·인쇄 크기·설치 높이·조명·거리·오차·추적 중단 결과와 실패 원인을 기록한다. 수치가 없으면 미측정으로 남긴다.
 
